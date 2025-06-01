@@ -1,0 +1,113 @@
+import os
+from typing import List, Optional
+from pydantic_settings import BaseSettings
+from pydantic import field_validator
+
+class Settings(BaseSettings):
+    # Application Settings
+    app_name: str = "Fee Master Backend"
+    version: str = "2.0.0"
+    debug: bool = False
+    host: str = "0.0.0.0"
+    port: int = 8000
+    
+    # Security Settings
+    secret_key: str = "your-secret-key-here"
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+    
+    # Supabase Settings (primary database)
+    supabase_url: str = "https://your-project.supabase.co"
+    supabase_anon_key: str = "your-anon-key"
+    supabase_service_key: str = "your-service-key"
+    
+    # PostgreSQL Settings (alternative)
+    database_url: Optional[str] = None
+    database_pool_size: int = 10
+    database_max_overflow: int = 20
+    
+    # CORS Settings
+    cors_origins: str = "http://localhost:3000,http://localhost:3001"
+    
+    # Email Settings
+    smtp_host: Optional[str] = None
+    smtp_port: int = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_use_tls: bool = True
+    
+    # SMS Settings
+    sms_provider: str = "twilio"  # twilio, africastalking, nexmo
+    twilio_account_sid: Optional[str] = None
+    twilio_auth_token: Optional[str] = None
+    twilio_phone_number: Optional[str] = None
+    
+    # WhatsApp Settings
+    whatsapp_api_url: Optional[str] = None
+    whatsapp_api_key: Optional[str] = None
+    whatsapp_phone_number: Optional[str] = None
+    
+    # File Storage Settings (Supabase Storage)
+    storage_provider: str = "supabase"  # local, s3, supabase
+    upload_path: str = "uploads"
+    max_file_size: int = 10 * 1024 * 1024  # 10MB
+    
+    # Storage Buckets
+    receipts_bucket: str = "receipts"
+    reports_bucket: str = "reports"
+    logos_bucket: str = "logos"
+    backups_bucket: str = "backups"
+    imports_bucket: str = "imports"
+    attachments_bucket: str = "attachments"
+    
+    # AWS S3 Settings (if using S3)
+    aws_access_key_id: Optional[str] = None
+    aws_secret_access_key: Optional[str] = None
+    aws_region: str = "us-east-1"
+    s3_bucket_name: Optional[str] = None
+    
+    # Payment Gateway Settings
+    stripe_public_key: Optional[str] = None
+    stripe_secret_key: Optional[str] = None
+    paypal_client_id: Optional[str] = None
+    paypal_client_secret: Optional[str] = None
+    
+    # QuickBooks Integration
+    quickbooks_client_id: Optional[str] = None
+    quickbooks_client_secret: Optional[str] = None
+    quickbooks_environment: str = "sandbox"  # sandbox, production
+    
+    # Redis Settings (for caching)
+    redis_url: Optional[str] = None
+    redis_password: Optional[str] = None
+    
+    # Logging Settings
+    log_level: str = "INFO"
+    log_file: str = "app.log"
+    
+    # School Settings (will be loaded from database)
+    default_school_name: str = "Fee Master Academy"
+    default_school_email: str = "info@feemaster.edu"
+    default_school_phone: str = "+260 97 123 4567"
+    default_school_address: str = "123 Education Street, Lusaka, Zambia"
+    default_currency: str = "ZMW"
+    default_timezone: str = "Africa/Lusaka"
+    
+    # Feature Flags
+    enable_notifications: bool = True
+    enable_receipts: bool = True
+    enable_integrations: bool = True
+    enable_analytics: bool = True
+    enable_reports: bool = True
+    enable_parent_portal: bool = True
+    enable_attendance: bool = True
+    
+    @property
+    def cors_origins_list(self) -> List[str]:
+        """Convert cors_origins string to list"""
+        return [origin.strip() for origin in self.cors_origins.split(",")]
+    
+    model_config = {"env_file": ".env", "case_sensitive": False}
+
+# Create settings instance
+settings = Settings() 
