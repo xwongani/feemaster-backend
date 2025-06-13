@@ -4,34 +4,86 @@ from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 import json
 from .config import settings
+import asyncpg
+from contextlib import asynccontextmanager
+import time
+from prometheus_client import Counter, Histogram, Gauge
 
 logger = logging.getLogger(__name__)
+
+# Prometheus metrics
+QUERY_DURATION = Histogram('query_duration_seconds', 'Time spent executing queries', ['operation'])
+QUERY_COUNT = Counter('query_count_total', 'Total number of queries executed', ['operation', 'status'])
+ACTIVE_CONNECTIONS = Gauge('active_db_connections', 'Number of active database connections')
+SLOW_QUERY_THRESHOLD = 1.0  # seconds
 
 class Database:
     def __init__(self):
         self.supabase_client = None
+        self.pool = None
+        self._connection_lock = asyncio.Lock()
+        self._query_log = []
+        self._max_query_log_size = 1000
         
     async def connect(self):
-        """Initialize Supabase connection"""
+        """Initialize database connections"""
         try:
+            # Initialize Supabase connection
             from supabase import create_client, Client
             
             self.supabase_client = create_client(
                 settings.supabase_url,
                 settings.supabase_service_key
             )
-            logger.info("Connected to Supabase")
+            
+            # Initialize connection pool if database_url is provided
+            if settings.database_url:
+                self.pool = await asyncpg.create_pool(
+                    settings.database_url,
+                    min_size=5,
+                    max_size=settings.database_pool_size,
+                    max_queries=50000,
+                    max_inactive_connection_lifetime=300.0,
+                    command_timeout=60.0,
+                    statement_cache_size=100
+                )
+                
+                # Set up connection monitoring
+                asyncio.create_task(self._monitor_connections())
+            
+            logger.info("Database connections initialized successfully")
                 
         except Exception as e:
             logger.error(f"Database connection failed: {e}")
             raise
-    
-    async def disconnect(self):
-        """Close database connections"""
-        if self.supabase_client:
-            # Supabase client doesn't need explicit disconnection
-            logger.info("Supabase connection closed")
+
+    async def _monitor_connections(self):
+        """Monitor database connections"""
+        while True:
+            try:
+                if self.pool:
+                    ACTIVE_CONNECTIONS.set(len(self.pool._holders))
+                await asyncio.sleep(60)  # Check every minute
+            except Exception as e:
+                logger.error(f"Connection monitoring failed: {e}")
+
+    def _log_query(self, operation: str, query: str, duration: float, status: str):
+        """Log query execution details"""
+        log_entry = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'operation': operation,
+            'query': query,
+            'duration': duration,
+            'status': status
+        }
         
+        self._query_log.append(log_entry)
+        if len(self._query_log) > self._max_query_log_size:
+            self._query_log.pop(0)
+            
+        if duration > SLOW_QUERY_THRESHOLD:
+            logger.warning(f"Slow query detected: {duration:.2f}s - {query}")
+
     async def execute_query(
         self,
         table: str,
@@ -44,15 +96,30 @@ class Database:
         order_by: Optional[str] = None,
         join_tables: Optional[List[str]] = None
     ) -> Dict[str, Any]:
-        """Execute database operations using Supabase"""
+        """Execute database operations with monitoring"""
+        start_time = time.time()
         try:
             if not self.supabase_client:
                 await self.connect()
             
+            # Use direct PostgreSQL connection if available and for complex queries
+            if self.pool and (join_tables or operation in ["select"]):
+                async with self.get_connection() as conn:
+                    query = self._build_query(
+                        table, operation, data, filters,
+                        select_fields, limit, offset, order_by, join_tables
+                    )
+                    result = await conn.fetch(query)
+                    duration = time.time() - start_time
+                    self._log_query(operation, query, duration, "success")
+                    QUERY_DURATION.labels(operation=operation).observe(duration)
+                    QUERY_COUNT.labels(operation=operation, status="success").inc()
+                    return {"success": True, "data": [dict(row) for row in result]}
+            
+            # Use Supabase for simple operations
             query = self.supabase_client.table(table)
             
             if operation == "select":
-                # Handle joins for complex queries
                 if join_tables:
                     select_fields = self._build_join_select(table, join_tables, select_fields)
                 
@@ -71,10 +138,18 @@ class Database:
                     query = query.offset(offset)
                 
                 result = query.execute()
+                duration = time.time() - start_time
+                self._log_query(operation, str(query), duration, "success")
+                QUERY_DURATION.labels(operation=operation).observe(duration)
+                QUERY_COUNT.labels(operation=operation, status="success").inc()
                 return {"success": True, "data": result.data}
                 
             elif operation == "insert":
                 result = query.insert(data).execute()
+                duration = time.time() - start_time
+                self._log_query(operation, str(query), duration, "success")
+                QUERY_DURATION.labels(operation=operation).observe(duration)
+                QUERY_COUNT.labels(operation=operation, status="success").inc()
                 return {"success": True, "data": result.data}
                 
             elif operation == "update":
@@ -82,17 +157,122 @@ class Database:
                 if filters:
                     query = self._apply_filters(query, filters)
                 result = query.execute()
+                duration = time.time() - start_time
+                self._log_query(operation, str(query), duration, "success")
+                QUERY_DURATION.labels(operation=operation).observe(duration)
+                QUERY_COUNT.labels(operation=operation, status="success").inc()
                 return {"success": True, "data": result.data}
                 
             elif operation == "delete":
                 if filters:
                     query = self._apply_filters(query, filters)
                 result = query.delete().execute()
+                duration = time.time() - start_time
+                self._log_query(operation, str(query), duration, "success")
+                QUERY_DURATION.labels(operation=operation).observe(duration)
+                QUERY_COUNT.labels(operation=operation, status="success").inc()
                 return {"success": True, "data": result.data}
                 
         except Exception as e:
+            duration = time.time() - start_time
+            self._log_query(operation, str(query) if 'query' in locals() else "N/A", duration, "error")
+            QUERY_DURATION.labels(operation=operation).observe(duration)
+            QUERY_COUNT.labels(operation=operation, status="error").inc()
             logger.error(f"Query execution failed: {e}")
             return {"success": False, "error": str(e), "data": []}
+
+    async def get_query_stats(self) -> Dict[str, Any]:
+        """Get query execution statistics"""
+        return {
+            "total_queries": len(self._query_log),
+            "slow_queries": len([q for q in self._query_log if q['duration'] > SLOW_QUERY_THRESHOLD]),
+            "average_duration": sum(q['duration'] for q in self._query_log) / len(self._query_log) if self._query_log else 0,
+            "recent_slow_queries": [q for q in self._query_log[-10:] if q['duration'] > SLOW_QUERY_THRESHOLD]
+        }
+    
+    async def disconnect(self):
+        """Close database connections"""
+        try:
+            if self.pool:
+                await self.pool.close()
+                logger.info("Database pool closed")
+            
+            # Supabase client doesn't need explicit disconnection
+            logger.info("Database connections closed successfully")
+            
+        except Exception as e:
+            logger.error(f"Error closing database connections: {e}")
+            raise
+    
+    @asynccontextmanager
+    async def get_connection(self):
+        """Get a database connection from the pool"""
+        if not self.pool:
+            raise Exception("Database pool not initialized")
+            
+        async with self._connection_lock:
+            conn = await self.pool.acquire()
+            try:
+                yield conn
+            finally:
+                await self.pool.release(conn)
+    
+    def _build_query(
+        self,
+        table: str,
+        operation: str,
+        data: Optional[Dict[str, Any]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        select_fields: str = "*",
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        order_by: Optional[str] = None,
+        join_tables: Optional[List[str]] = None
+    ) -> str:
+        """Build SQL query for direct PostgreSQL execution"""
+        if operation == "select":
+            query = f"SELECT {select_fields} FROM {table}"
+            
+            if join_tables:
+                for join_table in join_tables:
+                    query += f" LEFT JOIN {join_table} ON {table}.id = {join_table}.{table}_id"
+            
+            if filters:
+                conditions = []
+                for key, value in filters.items():
+                    if "__" in key:
+                        field, operator = key.split("__", 1)
+                        if operator == "gte":
+                            conditions.append(f"{field} >= '{value}'")
+                        elif operator == "lte":
+                            conditions.append(f"{field} <= '{value}'")
+                        elif operator == "like":
+                            conditions.append(f"{field} LIKE '%{value}%'")
+                        elif operator == "ilike":
+                            conditions.append(f"{field} ILIKE '%{value}%'")
+                        elif operator == "in":
+                            conditions.append(f"{field} IN ({','.join(map(str, value))})")
+                        elif operator == "neq":
+                            conditions.append(f"{field} != '{value}'")
+                    else:
+                        conditions.append(f"{key} = '{value}'")
+                
+                if conditions:
+                    query += " WHERE " + " AND ".join(conditions)
+            
+            if order_by:
+                query += f" ORDER BY {order_by}"
+            
+            if limit:
+                query += f" LIMIT {limit}"
+            
+            if offset:
+                query += f" OFFSET {offset}"
+            
+            return query
+        
+        # Add other operation types as needed
+        raise NotImplementedError(f"Operation {operation} not implemented for direct PostgreSQL")
     
     def _apply_filters(self, query, filters: Dict[str, Any]):
         """Apply filters to Supabase query"""
@@ -164,96 +344,117 @@ class Database:
             return {"success": False, "error": str(e), "data": []}
     
     async def get_dashboard_stats(self) -> Dict[str, Any]:
-        """Get dashboard statistics from actual schema"""
+        """Get real-time dashboard statistics with caching"""
         try:
-            # Get total active students using proper COUNT query
-            students_result = await self.execute_raw_query("""
-                SELECT COUNT(*) as total_students
-                FROM students 
-                WHERE status = 'active'
-            """)
-            
-            # Get current academic year and term
-            current_year = await self.execute_query(
-                "academic_years",
-                "select",
-                filters={"is_current": True},
-                select_fields="id, year_name"
-            )
-            
-            current_term = await self.execute_query(
-                "academic_terms",
-                "select", 
-                filters={"is_current": True},
-                select_fields="id, term_name"
-            )
-            
-            # Get total collections this month
-            collections_result = await self.execute_raw_query("""
-                SELECT COALESCE(SUM(amount), 0) as total
-                FROM payments 
-                WHERE payment_status = 'completed' 
-                AND DATE_TRUNC('month', payment_date) = DATE_TRUNC('month', CURRENT_DATE)
-            """)
-            
-            # Get pending payments
-            pending_result = await self.execute_raw_query("""
-                SELECT COALESCE(SUM(amount), 0) as total
-                FROM student_fees 
-                WHERE is_paid = false
-            """)
-            
-            # Get receipts generated this month
-            receipts_result = await self.execute_raw_query("""
-                SELECT COUNT(*) as count
-                FROM payment_receipts 
-                WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
-            """)
-            
-            # Get recent activities
-            activities_result = await self.execute_raw_query("""
+            # Use materialized view for better performance
+            stats_query = """
+                CREATE MATERIALIZED VIEW IF NOT EXISTS dashboard_stats AS
+                WITH current_term AS (
+                    SELECT id, term_name 
+                    FROM academic_terms 
+                    WHERE is_current = true
+                    LIMIT 1
+                ),
+                fee_stats AS (
+                    SELECT 
+                        COUNT(*) as total_students,
+                        SUM(CASE WHEN is_paid = true THEN 1 ELSE 0 END) as paid_students,
+                        SUM(CASE WHEN is_paid = false AND due_date < CURRENT_DATE THEN 1 ELSE 0 END) as overdue_students,
+                        SUM(amount) as total_fees,
+                        SUM(CASE WHEN is_paid = true THEN amount ELSE 0 END) as paid_amount,
+                        SUM(CASE WHEN is_paid = false AND due_date < CURRENT_DATE THEN amount ELSE 0 END) as overdue_amount
+                    FROM student_fees sf
+                    JOIN current_term ct ON sf.academic_term_id = ct.id
+                ),
+                payment_stats AS (
+                    SELECT 
+                        COUNT(*) as total_payments,
+                        SUM(amount) as total_revenue,
+                        COUNT(DISTINCT student_id) as students_paid,
+                        COUNT(CASE WHEN payment_status = 'completed' THEN 1 END) as successful_payments
+                    FROM payments
+                    WHERE payment_date >= CURRENT_DATE - INTERVAL '30 days'
+                ),
+                recent_activities AS (
+                    SELECT 
+                        p.id,
+                        p.payment_date,
+                        s.student_id,
+                        CONCAT(s.first_name, ' ', s.last_name) as student_name,
+                        p.amount,
+                        p.payment_status
+                    FROM payments p
+                    JOIN students s ON p.student_id = s.id
+                    ORDER BY p.payment_date DESC
+                    LIMIT 5
+                )
                 SELECT 
-                    p.id,
-                    p.payment_date as datetime,
-                    s.first_name || ' ' || s.last_name as student_name,
-                    s.student_id,
-                    UPPER(LEFT(s.first_name, 1)) || UPPER(LEFT(s.last_name, 1)) as initials,
-                    'Payment' as payment_type,
-                    p.amount,
-                    DATE(p.payment_date) as date,
-                    p.payment_status as status
-                FROM payments p
-                JOIN students s ON p.student_id = s.id
-                ORDER BY p.payment_date DESC
-                LIMIT 10
-            """)
+                    fs.*,
+                    ps.*,
+                    json_agg(ra.*) as recent_activities
+                FROM fee_stats fs
+                CROSS JOIN payment_stats ps
+                CROSS JOIN recent_activities ra
+                GROUP BY 
+                    fs.total_students, fs.paid_students, fs.overdue_students,
+                    fs.total_fees, fs.paid_amount, fs.overdue_amount,
+                    ps.total_payments, ps.total_revenue, ps.students_paid,
+                    ps.successful_payments;
+            """
             
-            total_students = students_result["data"]["data"][0]["total_students"] if students_result["success"] and students_result["data"]["data"] else 0
-            total_collections = collections_result["data"]["data"][0]["total"] if collections_result["success"] and collections_result["data"]["data"] else 0
-            pending_payments = pending_result["data"]["data"][0]["total"] if pending_result["success"] and pending_result["data"]["data"] else 0
-            receipts_generated = receipts_result["data"]["data"][0]["count"] if receipts_result["success"] and receipts_result["data"]["data"] else 0
-            recent_activities = activities_result["data"]["data"] if activities_result["success"] and activities_result["data"]["data"] else []
+            # Create index on materialized view
+            index_query = """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_dashboard_stats ON dashboard_stats(total_students);
+            """
             
-            collection_rate = 0
-            if total_collections + pending_payments > 0:
-                collection_rate = (total_collections / (total_collections + pending_payments)) * 100
+            # Execute view creation and indexing
+            await self.execute_raw_query(stats_query)
+            await self.execute_raw_query(index_query)
+            
+            # Refresh materialized view
+            refresh_query = "REFRESH MATERIALIZED VIEW CONCURRENTLY dashboard_stats;"
+            await self.execute_raw_query(refresh_query)
+            
+            # Get stats
+            result = await self.execute_raw_query("SELECT * FROM dashboard_stats;")
+            
+            if not result["success"] or not result["data"]:
+                return {
+                    "success": False,
+                    "error": "Failed to fetch dashboard statistics",
+                    "data": {}
+                }
+            
+            stats = result["data"][0]
+            
+            # Calculate additional metrics
+            stats["payment_success_rate"] = (
+                stats["successful_payments"] / stats["total_payments"] * 100 
+                if stats["total_payments"] > 0 else 0
+            )
+            
+            stats["collection_rate"] = (
+                stats["paid_amount"] / stats["total_fees"] * 100 
+                if stats["total_fees"] > 0 else 0
+            )
+            
+            stats["average_payment"] = (
+                stats["total_revenue"] / stats["total_payments"] 
+                if stats["total_payments"] > 0 else 0
+            )
             
             return {
                 "success": True,
-                "data": {
-                    "total_students": total_students,
-                    "total_collections": float(total_collections),
-                    "pending_payments": float(pending_payments),
-                    "receipts_generated": receipts_generated,
-                    "collection_rate": collection_rate,
-                    "recent_activities": recent_activities,
-                    "current_academic_year": current_year["data"][0]["year_name"] if current_year["success"] and current_year["data"] else "2024/2025",
-                    "current_academic_term": current_term["data"][0]["term_name"] if current_term["success"] and current_term["data"] else "Term 1"
-                }
+                "data": stats
             }
+            
         except Exception as e:
-            logger.error(f"Dashboard stats query failed: {e}")
-            return {"success": False, "error": str(e), "data": {}}
+            logger.error(f"Failed to get dashboard stats: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "data": {}
+            }
     
     async def get_financial_summary(self, date_from: Optional[str] = None, date_to: Optional[str] = None) -> Dict[str, Any]:
         """Get financial summary data from actual schema"""

@@ -182,20 +182,28 @@ class StudentUpdate(BaseModel):
     status: Optional[StudentStatus] = None
 
 # Parent Models
-class Parent(BaseModelWithID):
+class Parent(BaseModel):
+    id: str
     first_name: str
     last_name: str
-    relationship: RelationshipType
-    phone: str
-    email: Optional[str] = None
+    email: str
+    phone: Optional[str] = None
     address: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
 
 class ParentCreate(BaseModel):
     first_name: str
     last_name: str
-    relationship: RelationshipType
-    phone: str
+    email: str
+    phone: Optional[str] = None
+    address: Optional[str] = None
+
+class ParentUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     email: Optional[str] = None
+    phone: Optional[str] = None
     address: Optional[str] = None
 
 class ParentAccount(BaseModelWithID):
@@ -657,4 +665,18 @@ class QuickBooksExportResponse(BaseModel):
     status: str
     records_exported: int
     export_date: datetime
-    file_url: Optional[str] = None 
+    file_url: Optional[str] = None
+
+class MessageCreate(BaseModel):
+    message: str
+    recipients: List[Dict[str, str]]
+    group_type: Optional[str] = None
+
+class MessageHistory(BaseModel):
+    sid: str
+    to: str
+    from_: str = Field(alias="from")
+    body: str
+    status: str
+    date_sent: datetime
+    direction: str 

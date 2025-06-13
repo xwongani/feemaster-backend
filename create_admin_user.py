@@ -11,7 +11,7 @@ async def create_admin_user():
         existing = await db.execute_query(
             "users",
             "select",
-            filters={"email": "admin@example.com"},
+            filters={"email": "admin@feemaster.edu"},
             select_fields="*"
         )
         
@@ -29,21 +29,19 @@ async def create_admin_user():
         
         # Create admin user
         user_data = {
-            "email": "admin@example.com",
+            "email": "admin@feemaster.edu",
             "password_hash": password_hash,
             "first_name": "Admin",
             "last_name": "User",
             "role": "admin",
-            "is_active": True,
-            "is_verified": True,
-            "created_at": "2024-01-01T00:00:00Z"
+            "is_active": True
         }
         
         result = await db.execute_query("users", "insert", data=user_data)
         
         if result["success"]:
             print("Admin user created successfully!")
-            print(f"Email: admin@example.com")
+            print(f"Email: admin@feemaster.edu")
             print(f"Password: admin123")
             print(f"Role: admin")
         else:
@@ -55,4 +53,4 @@ async def create_admin_user():
         await db.disconnect()
 
 if __name__ == "__main__":
-    asyncio.run(create_admin_user()) 
+    asyncio.run(create_admin_user())

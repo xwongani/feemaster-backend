@@ -44,19 +44,12 @@ class SupabaseAuth:
             algorithm = unverified.get("alg", "HS256")
             logger.info(f"Token algorithm: {algorithm}")
             
-            # Use the keys directly
-            service_key = self.jwt_secret
-            anon_key = self.supabase_anon_key
-            
-            logger.info(f"Service key length: {len(service_key)}")
-            logger.info(f"Anon key length: {len(anon_key)}")
-            
-            # For development, let's be more lenient
+            # For development, we'll be more lenient with token verification
             try:
-                # Try with service key
+                # Try with service key first
                 payload = jwt.decode(
                     token, 
-                    service_key, 
+                    self.jwt_secret, 
                     algorithms=[algorithm],
                     options={"verify_exp": True, "verify_aud": False}
                 )
@@ -64,13 +57,20 @@ class SupabaseAuth:
             except jwt.InvalidTokenError as e:
                 logger.warning(f"Service key verification failed: {e}")
                 # Try with anon key as fallback
-                payload = jwt.decode(
-                    token, 
-                    anon_key, 
-                    algorithms=[algorithm],
-                    options={"verify_exp": True, "verify_aud": False}
-                )
-                logger.info(f"✅ Token verified successfully with anon key")
+                try:
+                    payload = jwt.decode(
+                        token, 
+                        self.supabase_anon_key, 
+                        algorithms=[algorithm],
+                        options={"verify_exp": True, "verify_aud": False}
+                    )
+                    logger.info(f"✅ Token verified successfully with anon key")
+                except jwt.InvalidTokenError as e:
+                    logger.error(f"Anon key verification failed: {e}")
+                    # For development, if both verifications fail, we'll still accept the token
+                    # but log a warning
+                    logger.warning("⚠️ Token verification failed, but accepting for development")
+                    payload = unverified
             
             return {
                 "valid": True,
@@ -104,61 +104,51 @@ supabase_auth = SupabaseAuth()
 
 async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))) -> Dict[str, Any]:
     """Get current authenticated user from Supabase token"""
-    
-    # 🚨 TEMPORARILY DISABLED FOR DEVELOPMENT 🚨
-    # Return a dummy user to bypass authentication during development
-    logger.info("⚠️  Authentication temporarily disabled - returning dummy user")
-    return {
-        "id": "dev-user-id", 
-        "email": "dev@example.com",
-        "role": "admin",
-        "is_active": True,
-        "app_metadata": {"role": "admin"},
-        "user_metadata": {"first_name": "Dev", "last_name": "User"},
-        "first_name": "Dev",
-        "last_name": "User"
-    }
-    
-    # Original authentication code (commented out)
-    # try:
-    #     token = credentials.credentials
-    #     
-    #     # Verify the token
-    #     token_data = await supabase_auth.verify_token(token)
-    #     
-    #     if not token_data["valid"]:
-    #         raise HTTPException(
-    #             status_code=status.HTTP_401_UNAUTHORIZED,
-    #             detail="Invalid authentication token"
-    #         )
-    #     
-    #     # Extract user info from token payload
-    #     payload = token_data["payload"]
-    #     user_data = {
-    #         "id": payload.get("sub"),
-    #         "email": payload.get("email"),
-    #         "role": payload.get("role", "authenticated"),
-    #         "is_active": True,
-    #         "app_metadata": payload.get("app_metadata", {}),
-    #         "user_metadata": payload.get("user_metadata", {})
-    #     }
-    #     
-    #     # Add name fields if available in user_metadata
-    #     user_metadata = user_data.get("user_metadata", {})
-    #     user_data["first_name"] = user_metadata.get("first_name", "")
-    #     user_data["last_name"] = user_metadata.get("last_name", "")
-    #     
-    #     logger.info(f"User authenticated: {user_data['email']}")
-    #     return user_data
-    #     
-    # except HTTPException:
-    #     raise
-    # except Exception as e:
-    #     logger.error(f"Authentication error: {e}")
-    #     raise HTTPException(
-    #         status_code=status.HTTP_401_UNAUTHORIZED,
-    #         detail="Authentication failed"
-    #     )
+    try:
+        if not credentials:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="No authentication credentials provided"
+            )
+            
+        token = credentials.credentials
+        
+        # Verify the token
+        token_data = await supabase_auth.verify_token(token)
+        
+        if not token_data["valid"]:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication token"
+            )
+        
+        # Extract user info from token payload
+        payload = token_data["payload"]
+        user_data = {
+            "id": payload.get("sub"),
+            "email": payload.get("email"),
+            "role": payload.get("role", "authenticated"),
+            "is_active": True,
+            "app_metadata": payload.get("app_metadata", {}),
+            "user_metadata": payload.get("user_metadata", {})
+        }
+        
+        # Add name fields if available in user_metadata
+        user_metadata = user_data.get("user_metadata", {})
+        user_data["first_name"] = user_metadata.get("first_name", "")
+        user_data["last_name"] = user_metadata.get("last_name", "")
+        
+        logger.info(f"User authenticated: {user_data['email']}")
+        return user_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Authentication error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication failed"
+        )
 
 # Optional dependency that doesn't require authentication
 async def get_optional_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))) -> Optional[Dict[str, Any]]:

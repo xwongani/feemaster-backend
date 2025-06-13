@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import jwt
 import bcrypt
 import logging
+from supabase import create_client, Client
 
 from ..models import UserLogin, UserCreate, Token, User, APIResponse
 from ..database import db
@@ -13,6 +14,18 @@ from ..config import settings
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["authentication"])
 security = HTTPBearer()
+
+# Initialize Supabase client
+supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
+
+# Test user credentials (for development only)
+TEST_USER = {
+    "email": "test@feemaster.com",
+    "password": "test123",
+    "role": "admin",
+    "is_active": True,
+    "is_verified": True
+}
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """Create JWT access token"""
@@ -28,7 +41,14 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify password against hash"""
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    try:
+        return bcrypt.checkpw(
+            plain_password.encode('utf-8'),
+            hashed_password.encode('utf-8')
+        )
+    except Exception as e:
+        logger.error(f"Password verification failed: {e}")
+        return False
 
 def get_password_hash(password: str) -> str:
     """Hash password"""
@@ -81,62 +101,104 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 async def login(user_credentials: UserLogin):
     """Authenticate user and return access token"""
     try:
-        # Get user by email
-        result = await db.execute_query(
-            "users",
-            "select",
-            filters={"email": user_credentials.email},
-            select_fields="*"
-        )
+        logger.info(f"Login attempt for email: {user_credentials.email}")
         
-        if not result["success"] or not result["data"]:
+        # Check for test user (development only)
+        if settings.debug and user_credentials.email == TEST_USER["email"] and user_credentials.password == TEST_USER["password"]:
+            logger.info("Test user login successful")
+            access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+            access_token = create_access_token(
+                data={"sub": "test-user-id", "email": TEST_USER["email"], "role": TEST_USER["role"]},
+                expires_delta=access_token_expires
+            )
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "user": {
+                    "id": "test-user-id",
+                    "email": TEST_USER["email"],
+                    "role": TEST_USER["role"],
+                    "is_active": TEST_USER["is_active"],
+                    "is_verified": TEST_USER["is_verified"]
+                }
+            }
+        
+        # Normal login flow with Supabase
+        try:
+            # Attempt to sign in with Supabase
+            response = supabase.auth.sign_in_with_password({
+                "email": user_credentials.email,
+                "password": user_credentials.password
+            })
+            
+            if not response.user:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid email or password"
+                )
+            
+            # Get user data from our database
+            result = await db.execute_query(
+                "users",
+                "select",
+                filters={"email": user_credentials.email},
+                select_fields="*"
+            )
+            
+            if not result["success"] or not result["data"]:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User not found in database"
+                )
+            
+            user = result["data"][0]
+            
+            if not user.get("is_active", True):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Account is inactive"
+                )
+            
+            # Update last login
+            await db.execute_query(
+                "users",
+                "update",
+                filters={"id": user["id"]},
+                data={"last_login": datetime.utcnow().isoformat()}
+            )
+            
+            # Create access token
+            access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+            access_token = create_access_token(
+                data={"sub": user["id"], "email": user["email"], "role": user.get("role", "user")},
+                expires_delta=access_token_expires
+            )
+            
+            # Remove sensitive data from user object
+            user_data = {k: v for k, v in user.items() if k not in ["password_hash", "password"]}
+            
+            logger.info(f"Login successful for user: {user.get('id')}")
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "user": user_data
+            }
+            
+        except Exception as e:
+            logger.error(f"Supabase authentication failed: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
             )
         
-        user = result["data"][0]
-        
-        # Verify password
-        if not verify_password(user_credentials.password, user["password_hash"]):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password"
-            )
-        
-        if not user["is_active"]:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Account is inactive"
-            )
-        
-        # Update last login
-        await db.execute_query(
-            "users",
-            "update",
-            filters={"id": user["id"]},
-            data={"last_login": datetime.utcnow().isoformat()}
-        )
-        
-        # Create access token
-        access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
-        access_token = create_access_token(
-            data={"sub": user["id"], "email": user["email"], "role": user["role"]},
-            expires_delta=access_token_expires
-        )
-        
-        # Remove password hash from user data
-        user_data = {k: v for k, v in user.items() if k != "password_hash"}
-        
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user": user_data
-        }
-        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Login failed: {e}")
-        raise HTTPException(status_code=500, detail="Login failed")
+        logger.error(f"Login failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Login failed"
+        )
 
 @router.post("/register", response_model=APIResponse)
 async def register(user_data: UserCreate):

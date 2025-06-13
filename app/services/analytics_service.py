@@ -48,46 +48,62 @@ class AnalyticsService:
     async def get_payment_trends(self, period: str = "month", date_from: Optional[date] = None, date_to: Optional[date] = None) -> Dict[str, Any]:
         """Get payment trends analysis"""
         try:
-            if not self.initialized:
-                return {"success": False, "error": "Analytics service not initialized"}
-            
-            # Check cache
-            cache_key = self._get_cache_key("payment_trends", {"period": period, "date_from": str(date_from), "date_to": str(date_to)})
-            if cache_key in self.cache and self._is_cache_valid(self.cache[cache_key]):
-                return self.cache[cache_key]["data"]
-            
-            # Calculate date range
-            end_date = date_to or datetime.now().date()
-            
-            if period == "week":
-                start_date = date_from or (end_date - timedelta(days=7))
-                group_format = "DATE(payment_date)"
-                date_format = "Daily"
-            elif period == "month":
-                start_date = date_from or (end_date - timedelta(days=30))
-                group_format = "DATE(payment_date)"
-                date_format = "Daily"
-            elif period == "quarter":
-                start_date = date_from or (end_date - timedelta(days=90))
-                group_format = "DATE_TRUNC('week', payment_date)"
-                date_format = "Weekly"
-            else:  # year
-                start_date = date_from or (end_date - timedelta(days=365))
-                group_format = "DATE_TRUNC('month', payment_date)"
-                date_format = "Monthly"
-            
-            # Query payment trends
-            trends_query = f"""
+            # Create materialized view for payment trends
+            trends_view_query = """
+                CREATE MATERIALIZED VIEW IF NOT EXISTS payment_trends AS
                 SELECT 
-                    {group_format} as period,
+                    DATE_TRUNC('month', payment_date) as period,
                     COUNT(*) as transaction_count,
                     COALESCE(SUM(CASE WHEN payment_status = 'completed' THEN amount ELSE 0 END), 0) as completed_amount,
                     COALESCE(SUM(CASE WHEN payment_status = 'pending' THEN amount ELSE 0 END), 0) as pending_amount,
                     COALESCE(AVG(CASE WHEN payment_status = 'completed' THEN amount END), 0) as avg_amount,
                     COUNT(CASE WHEN payment_status = 'completed' THEN 1 END) as completed_count,
                     COUNT(CASE WHEN payment_status = 'failed' THEN 1 END) as failed_count
-                FROM payments 
-                WHERE payment_date >= '{start_date}' AND payment_date <= '{end_date}'
+                FROM payments
+                GROUP BY DATE_TRUNC('month', payment_date)
+                WITH DATA;
+            """
+            
+            # Create index on materialized view
+            trends_view_index = """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_trends_period ON payment_trends(period);
+            """
+            
+            # Execute view creation
+            await db.execute_raw_query(trends_view_query)
+            await db.execute_raw_query(trends_view_index)
+            
+            # Calculate date range
+            end_date = date_to or datetime.now().date()
+            if period == "week":
+                start_date = date_from or (end_date - timedelta(days=7))
+                group_format = "DATE_TRUNC('day', payment_date)"
+                date_format = "YYYY-MM-DD"
+            elif period == "month":
+                start_date = date_from or (end_date - timedelta(days=30))
+                group_format = "DATE_TRUNC('day', payment_date)"
+                date_format = "YYYY-MM-DD"
+            elif period == "quarter":
+                start_date = date_from or (end_date - timedelta(days=90))
+                group_format = "DATE_TRUNC('month', payment_date)"
+                date_format = "YYYY-MM"
+            else:  # year
+                start_date = date_from or (end_date - timedelta(days=365))
+                group_format = "DATE_TRUNC('month', payment_date)"
+                date_format = "YYYY-MM"
+            
+            # Query using materialized view
+            trends_query = f"""
+                SELECT 
+                    {group_format} as period,
+                    SUM(transaction_count) as transaction_count,
+                    SUM(completed_amount) as completed_amount,
+                    SUM(pending_amount) as pending_amount,
+                    AVG(avg_amount) as avg_amount,
+                    SUM(completed_count) as completed_count,
+                    SUM(failed_count) as failed_count
+                FROM payment_trends
+                WHERE period >= '{start_date}' AND period <= '{end_date}'
                 GROUP BY {group_format}
                 ORDER BY period
             """
@@ -110,23 +126,10 @@ class AnalyticsService:
                 }
             }
             
-            # Calculate growth rate
-            if len(data) >= 2:
-                current_period = float(data[-1]["completed_amount"])
-                previous_period = float(data[-2]["completed_amount"])
-                growth_rate = ((current_period - previous_period) / previous_period * 100) if previous_period > 0 else 0
-                trends_data["summary"]["growth_rate"] = growth_rate
-            
-            # Cache the result
-            self.cache[cache_key] = {
-                "data": {"success": True, "data": trends_data},
-                "timestamp": datetime.utcnow().timestamp()
-            }
-            
             return {"success": True, "data": trends_data}
             
         except Exception as e:
-            logger.error(f"Failed to get payment trends: {e}")
+            logger.error(f"Payment trends query failed: {e}")
             return {"success": False, "error": str(e)}
     
     async def get_student_analytics(self) -> Dict[str, Any]:

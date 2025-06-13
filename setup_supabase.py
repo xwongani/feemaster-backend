@@ -102,11 +102,12 @@ SUPABASE_SERVICE_KEY=your-service-role-key-here
 # CORS Settings
 CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000
 
-# Email Settings (SMTP) - Optional
-SMTP_HOST=smtp.gmail.com
+# Email Settings (SendGrid) - Optional
+SMTP_HOST=smtp.sendgrid.net
 SMTP_PORT=587
-SMTP_USERNAME=your-email@gmail.com
-SMTP_PASSWORD=your-app-password
+SMTP_USERNAME=apikey
+SMTP_PASSWORD=your-sendgrid-api-key
+SENDGRID_API_KEY=your-sendgrid-api-key
 SMTP_USE_TLS=true
 
 # SMS Settings (Twilio) - Optional

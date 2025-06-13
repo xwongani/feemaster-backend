@@ -159,40 +159,9 @@ async def get_payments(
 ):
     """Get paginated list of payments with filters"""
     try:
-        # Build complex query with joins
-        where_conditions = []
-        params = []
-        param_count = 0
-        
-        if student_id:
-            param_count += 1
-            where_conditions.append(f"p.student_id = ${param_count}")
-            params.append(student_id)
-            
-        if payment_status:
-            param_count += 1
-            where_conditions.append(f"p.payment_status = ${param_count}")
-            params.append(payment_status)
-            
-        if payment_method:
-            param_count += 1
-            where_conditions.append(f"p.payment_method = ${param_count}")
-            params.append(payment_method)
-            
-        if date_from:
-            param_count += 1
-            where_conditions.append(f"DATE(p.payment_date) >= ${param_count}")
-            params.append(date_from)
-            
-        if date_to:
-            param_count += 1
-            where_conditions.append(f"DATE(p.payment_date) <= ${param_count}")
-            params.append(date_to)
-        
-        where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
-        
-        # Main query with student information
-        query = f"""
+        # Build complex query with joins using materialized view
+        payment_view_query = """
+            CREATE MATERIALIZED VIEW IF NOT EXISTS payment_details AS
             SELECT 
                 p.*,
                 s.student_id as student_number,
@@ -216,19 +185,66 @@ async def get_payments(
             LEFT JOIN payment_allocations pa ON p.id = pa.payment_id
             LEFT JOIN student_fees sf ON pa.student_fee_id = sf.id
             LEFT JOIN fee_types ft ON sf.fee_type_id = ft.id
-            {where_clause}
             GROUP BY p.id, s.student_id, s.first_name, s.last_name, s.grade, pr.receipt_number, pr.file_url
-            ORDER BY p.payment_date DESC
+            WITH DATA;
+        """
+        
+        # Create index on materialized view
+        payment_view_index = """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_details_id ON payment_details(id);
+            CREATE INDEX IF NOT EXISTS idx_payment_details_date ON payment_details(payment_date);
+            CREATE INDEX IF NOT EXISTS idx_payment_details_status ON payment_details(payment_status);
+        """
+        
+        # Execute view creation
+        await db.execute_raw_query(payment_view_query)
+        await db.execute_raw_query(payment_view_index)
+        
+        # Build where conditions
+        where_conditions = []
+        params = []
+        param_count = 0
+        
+        if student_id:
+            param_count += 1
+            where_conditions.append(f"student_id = ${param_count}")
+            params.append(student_id)
+            
+        if payment_status:
+            param_count += 1
+            where_conditions.append(f"payment_status = ${param_count}")
+            params.append(payment_status)
+            
+        if payment_method:
+            param_count += 1
+            where_conditions.append(f"payment_method = ${param_count}")
+            params.append(payment_method)
+            
+        if date_from:
+            param_count += 1
+            where_conditions.append(f"DATE(payment_date) >= ${param_count}")
+            params.append(date_from)
+            
+        if date_to:
+            param_count += 1
+            where_conditions.append(f"DATE(payment_date) <= ${param_count}")
+            params.append(date_to)
+        
+        where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+        
+        # Query using materialized view
+        query = f"""
+            SELECT * FROM payment_details
+            {where_clause}
+            ORDER BY payment_date DESC
             LIMIT {per_page} OFFSET {(page - 1) * per_page}
         """
         
         result = await db.execute_raw_query(query, params)
         
-        # Get total count
+        # Get total count using materialized view
         count_query = f"""
-            SELECT COUNT(DISTINCT p.id)
-            FROM payments p
-            JOIN students s ON p.student_id = s.id
+            SELECT COUNT(*) FROM payment_details
             {where_clause}
         """
         

@@ -1,4 +1,4 @@
-[project]
+pip install "numpy<1.26.2"[project]
 name = "fee-master-backend"
 version = "2.0.0"
 description = "Fee Master Backend - School Administration System"
@@ -6,7 +6,7 @@ authors = [
     {name = "Fee Master Team", email = "info@feemaster.edu"}
 ]
 readme = "README_SUPABASE.md"
-requires-python = ">=3.8"
+requires-python = ">=3.8.1"
 dependencies = [
     "fastapi>=0.104.1",
     "uvicorn[standard]>=0.24.0",
@@ -22,8 +22,8 @@ dependencies = [
     "aiofiles>=23.2.1",
     "openpyxl>=3.1.2",
     "reportlab>=4.0.7",
-    "pandas>=2.1.4",
-    "numpy>=1.26.2",
+    "pandas>=1.5.3,<2.0.0",
+    "numpy>=1.24.0,<2.0.0",
     "pillow>=10.1.0",
 ]
 

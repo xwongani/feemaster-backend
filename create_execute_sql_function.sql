@@ -1,7 +1,7 @@
 -- Create execute_sql function for Supabase
 -- This function allows the backend to execute dynamic SQL queries
 
-CREATE OR REPLACE FUNCTION public.execute_sql(query text, params jsonb DEFAULT '[]')
+CREATE OR REPLACE FUNCTION public.execute_sql(query text, params jsonb DEFAULT '[]'::jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -9,14 +9,14 @@ AS $$
 DECLARE
     result jsonb;
     rec record;
-    rows jsonb := '[]';
+    rows jsonb := '[]'::jsonb;
 BEGIN
     -- Validate that query is not empty
     IF query IS NULL OR trim(query) = '' THEN
         RETURN jsonb_build_object(
             'success', false,
             'error', 'Query cannot be empty',
-            'data', '[]'
+            'data', '[]'::jsonb
         );
     END IF;
     
@@ -38,7 +38,7 @@ BEGIN
         RETURN jsonb_build_object(
             'success', false,
             'error', SQLERRM,
-            'data', '[]'
+            'data', '[]'::jsonb
         );
     END;
 END;
@@ -47,20 +47,6 @@ $$;
 -- Grant execute permission to authenticated users
 GRANT EXECUTE ON FUNCTION public.execute_sql(text, jsonb) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.execute_sql(text, jsonb) TO service_role;
-
--- Also create a simpler version without parameters for backward compatibility
-CREATE OR REPLACE FUNCTION public.execute_sql(query text)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-    RETURN public.execute_sql(query, '[]');
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.execute_sql(text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.execute_sql(text) TO service_role;
 
 -- Test the function with a simple query
 SELECT public.execute_sql('SELECT COUNT(*) as total_students FROM students WHERE status = ''active'''); 

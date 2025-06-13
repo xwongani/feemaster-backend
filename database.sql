@@ -760,3 +760,19 @@ SET
     current_academic_year_id = (SELECT id FROM academic_years WHERE is_current = true LIMIT 1),
     current_academic_term_id = (SELECT id FROM academic_terms WHERE is_current = true LIMIT 1)
 WHERE id = 1;
+
+-- Add indexes for frequently queried columns
+CREATE INDEX IF NOT EXISTS idx_payments_payment_date ON payments(payment_date);
+CREATE INDEX IF NOT EXISTS idx_payments_payment_status ON payments(payment_status);
+CREATE INDEX IF NOT EXISTS idx_payments_student_id ON payments(student_id);
+CREATE INDEX IF NOT EXISTS idx_students_status ON students(status);
+CREATE INDEX IF NOT EXISTS idx_students_grade ON students(grade);
+CREATE INDEX IF NOT EXISTS idx_student_fees_is_paid ON student_fees(is_paid);
+CREATE INDEX IF NOT EXISTS idx_student_fees_due_date ON student_fees(due_date);
+CREATE INDEX IF NOT EXISTS idx_payment_receipts_payment_id ON payment_receipts(payment_id);
+CREATE INDEX IF NOT EXISTS idx_payment_allocations_payment_id ON payment_allocations(payment_id);
+
+-- Composite indexes for common query patterns
+CREATE INDEX IF NOT EXISTS idx_payments_date_status ON payments(payment_date, payment_status);
+CREATE INDEX IF NOT EXISTS idx_students_grade_status ON students(grade, status);
+CREATE INDEX IF NOT EXISTS idx_student_fees_student_paid ON student_fees(student_id, is_paid);

@@ -2,27 +2,34 @@ import os
 from typing import List, Optional
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class Settings(BaseSettings):
     # Application Settings
     app_name: str = "Fee Master Backend"
     version: str = "2.0.0"
-    debug: bool = False
+    debug: bool = os.getenv("DEBUG", "false").lower() == "true"
     host: str = "0.0.0.0"
     port: int = 8000
     
     # Security Settings
-    secret_key: str = "your-secret-key-here"
-    algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    secret_key: str = os.getenv("SECRET_KEY", "your-secret-key-here")
+    algorithm: str = os.getenv("ALGORITHM", "HS256")
+    access_token_expire_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     
     # Supabase Settings (primary database)
-    supabase_url: str = "https://your-project.supabase.co"
-    supabase_anon_key: str = "your-anon-key"
-    supabase_service_key: str = "your-service-key"
+    supabase_url: str = os.getenv("SUPABASE_URL", "")
+    supabase_key: str = os.getenv("SUPABASE_ANON_KEY", "")
+    supabase_service_key: str = os.getenv("SUPABASE_SERVICE_KEY", "")
+    
+    # React App Supabase Settings (for frontend)
+    react_app_supabase_url: Optional[str] = None
+    react_app_supabase_anon_key: Optional[str] = None
     
     # PostgreSQL Settings (alternative)
-    database_url: Optional[str] = None
+    database_url: str = os.getenv("DATABASE_URL", "")
     database_pool_size: int = 10
     database_max_overflow: int = 20
     
@@ -33,8 +40,9 @@ class Settings(BaseSettings):
     smtp_host: Optional[str] = None
     smtp_port: int = 587
     smtp_username: Optional[str] = None
-    smtp_password: Optional[str] = None
+    smtp_password: Optional[str] = None  # SendGrid API key
     smtp_use_tls: bool = True
+    sendgrid_api_key: Optional[str] = None  # Alternative to smtp_password
     
     # SMS Settings
     sms_provider: str = "twilio"  # twilio, africastalking, nexmo
@@ -107,7 +115,10 @@ class Settings(BaseSettings):
         """Convert cors_origins string to list"""
         return [origin.strip() for origin in self.cors_origins.split(",")]
     
-    model_config = {"env_file": ".env", "case_sensitive": False}
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+        extra = "ignore"  # This will ignore extra fields instead of raising errors
 
 # Create settings instance
 settings = Settings() 

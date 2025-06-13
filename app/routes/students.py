@@ -32,37 +32,62 @@ async def get_students(
         if status:
             filters["status"] = status
         if search:
-            # For search, we'll use a more complex query
-            search_query = f"""
-                SELECT s.*, 
-                       psl.relationship,
-                       p.first_name as parent_first_name,
-                       p.last_name as parent_last_name,
-                       p.phone as parent_phone
-                FROM students s
-                LEFT JOIN parent_student_links psl ON s.id = psl.student_id AND psl.is_primary_contact = true
-                LEFT JOIN parents p ON psl.parent_id = p.id
-                WHERE (s.first_name ILIKE '%{search}%' 
-                   OR s.last_name ILIKE '%{search}%' 
-                   OR s.student_id ILIKE '%{search}%')
-                {f"AND s.grade = '{grade}'" if grade else ""}
-                {f"AND s.status = '{status}'" if status else ""}
-                ORDER BY s.created_at DESC
-                LIMIT {per_page} OFFSET {(page - 1) * per_page}
-            """
-            result = await db.execute_raw_query(search_query)
+            # Optimized search query with parameterized values
+            search_query = """
+                WITH student_data AS (
+                    SELECT 
+                        s.*,
+                        psl.relationship,
+                        p.first_name as parent_first_name,
+                        p.last_name as parent_last_name,
+                        p.phone as parent_phone
+                    FROM students s
+                    LEFT JOIN parent_student_links psl ON s.id = psl.student_id AND psl.is_primary_contact = true
+                    LEFT JOIN parents p ON psl.parent_id = p.id
+                    WHERE (
+                        s.first_name ILIKE $1 
+                        OR s.last_name ILIKE $1 
+                        OR s.student_id ILIKE $1
+                    )
+                    {grade_filter}
+                    {status_filter}
+                )
+                SELECT * FROM student_data
+                ORDER BY created_at DESC
+                LIMIT $2 OFFSET $3
+            """.format(
+                grade_filter=f"AND s.grade = ${param_count + 1}" if grade else "",
+                status_filter=f"AND s.status = ${param_count + 2}" if status else ""
+            )
             
-            # Get total count for pagination
-            count_query = f"""
+            # Prepare parameters
+            search_param = f"%{search}%"
+            params = [search_param]
+            if grade:
+                params.append(grade)
+            if status:
+                params.append(status)
+            params.extend([per_page, (page - 1) * per_page])
+            
+            result = await db.execute_raw_query(search_query, params)
+            
+            # Optimized count query
+            count_query = """
                 SELECT COUNT(*)
                 FROM students s
-                WHERE (s.first_name ILIKE '%{search}%' 
-                   OR s.last_name ILIKE '%{search}%' 
-                   OR s.student_id ILIKE '%{search}%')
-                {f"AND s.grade = '{grade}'" if grade else ""}
-                {f"AND s.status = '{status}'" if status else ""}
-            """
-            count_result = await db.execute_raw_query(count_query)
+                WHERE (
+                    s.first_name ILIKE $1 
+                    OR s.last_name ILIKE $1 
+                    OR s.student_id ILIKE $1
+                )
+                {grade_filter}
+                {status_filter}
+            """.format(
+                grade_filter=f"AND s.grade = ${param_count + 1}" if grade else "",
+                status_filter=f"AND s.status = ${param_count + 2}" if status else ""
+            )
+            
+            count_result = await db.execute_raw_query(count_query, params[:-2])  # Exclude pagination params
             total = count_result["data"][0]["count"] if count_result["success"] and count_result["data"] else 0
         else:
             # Simple query without complex joins for testing
