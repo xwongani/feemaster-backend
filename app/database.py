@@ -28,13 +28,18 @@ class Database:
     async def connect(self):
         """Initialize database connections"""
         try:
-            # Initialize Supabase connection
-            from supabase import create_client, Client
-            
-            self.supabase_client = create_client(
-                settings.supabase_url,
-                settings.supabase_service_key
-            )
+            # Initialize Supabase connection only if URL is provided
+            if settings.supabase_url and settings.supabase_service_key:
+                try:
+                    from supabase import create_client, Client
+                    self.supabase_client = create_client(
+                        settings.supabase_url,
+                        settings.supabase_service_key
+                    )
+                    logger.info("Supabase connection initialized")
+                except Exception as e:
+                    logger.warning(f"Failed to initialize Supabase connection: {e}")
+                    self.supabase_client = None
             
             # Initialize connection pool if database_url is provided
             if settings.database_url:
@@ -50,6 +55,9 @@ class Database:
                 
                 # Set up connection monitoring
                 asyncio.create_task(self._monitor_connections())
+                logger.info("PostgreSQL connection pool initialized")
+            else:
+                logger.warning("No DATABASE_URL provided - using Supabase only")
             
             logger.info("Database connections initialized successfully")
                 
@@ -99,11 +107,12 @@ class Database:
         """Execute database operations with monitoring"""
         start_time = time.time()
         try:
-            if not self.supabase_client:
+            # Ensure we have a connection
+            if not self.pool and not self.supabase_client:
                 await self.connect()
             
-            # Use direct PostgreSQL connection if available and for complex queries
-            if self.pool and (join_tables or operation in ["select"]):
+            # Use direct PostgreSQL connection if available
+            if self.pool:
                 async with self.get_connection() as conn:
                     query = self._build_query(
                         table, operation, data, filters,
@@ -116,62 +125,66 @@ class Database:
                     QUERY_COUNT.labels(operation=operation, status="success").inc()
                     return {"success": True, "data": [dict(row) for row in result]}
             
-            # Use Supabase for simple operations
-            query = self.supabase_client.table(table)
+            # Use Supabase for simple operations if available
+            if self.supabase_client:
+                query = self.supabase_client.table(table)
+                
+                if operation == "select":
+                    if join_tables:
+                        select_fields = self._build_join_select(table, join_tables, select_fields)
+                    
+                    query = query.select(select_fields)
+                    
+                    if filters:
+                        query = self._apply_filters(query, filters)
+                    
+                    if order_by:
+                        query = query.order(order_by)
+                    
+                    if limit:
+                        query = query.limit(limit)
+                    
+                    if offset:
+                        query = query.offset(offset)
+                    
+                    result = query.execute()
+                    duration = time.time() - start_time
+                    self._log_query(operation, str(query), duration, "success")
+                    QUERY_DURATION.labels(operation=operation).observe(duration)
+                    QUERY_COUNT.labels(operation=operation, status="success").inc()
+                    return {"success": True, "data": result.data}
+                    
+                elif operation == "insert":
+                    result = query.insert(data).execute()
+                    duration = time.time() - start_time
+                    self._log_query(operation, str(query), duration, "success")
+                    QUERY_DURATION.labels(operation=operation).observe(duration)
+                    QUERY_COUNT.labels(operation=operation, status="success").inc()
+                    return {"success": True, "data": result.data}
+                    
+                elif operation == "update":
+                    query = query.update(data)
+                    if filters:
+                        query = self._apply_filters(query, filters)
+                    result = query.execute()
+                    duration = time.time() - start_time
+                    self._log_query(operation, str(query), duration, "success")
+                    QUERY_DURATION.labels(operation=operation).observe(duration)
+                    QUERY_COUNT.labels(operation=operation, status="success").inc()
+                    return {"success": True, "data": result.data}
+                    
+                elif operation == "delete":
+                    if filters:
+                        query = self._apply_filters(query, filters)
+                    result = query.delete().execute()
+                    duration = time.time() - start_time
+                    self._log_query(operation, str(query), duration, "success")
+                    QUERY_DURATION.labels(operation=operation).observe(duration)
+                    QUERY_COUNT.labels(operation=operation, status="success").inc()
+                    return {"success": True, "data": result.data}
             
-            if operation == "select":
-                if join_tables:
-                    select_fields = self._build_join_select(table, join_tables, select_fields)
-                
-                query = query.select(select_fields)
-                
-                if filters:
-                    query = self._apply_filters(query, filters)
-                
-                if order_by:
-                    query = query.order(order_by)
-                
-                if limit:
-                    query = query.limit(limit)
-                
-                if offset:
-                    query = query.offset(offset)
-                
-                result = query.execute()
-                duration = time.time() - start_time
-                self._log_query(operation, str(query), duration, "success")
-                QUERY_DURATION.labels(operation=operation).observe(duration)
-                QUERY_COUNT.labels(operation=operation, status="success").inc()
-                return {"success": True, "data": result.data}
-                
-            elif operation == "insert":
-                result = query.insert(data).execute()
-                duration = time.time() - start_time
-                self._log_query(operation, str(query), duration, "success")
-                QUERY_DURATION.labels(operation=operation).observe(duration)
-                QUERY_COUNT.labels(operation=operation, status="success").inc()
-                return {"success": True, "data": result.data}
-                
-            elif operation == "update":
-                query = query.update(data)
-                if filters:
-                    query = self._apply_filters(query, filters)
-                result = query.execute()
-                duration = time.time() - start_time
-                self._log_query(operation, str(query), duration, "success")
-                QUERY_DURATION.labels(operation=operation).observe(duration)
-                QUERY_COUNT.labels(operation=operation, status="success").inc()
-                return {"success": True, "data": result.data}
-                
-            elif operation == "delete":
-                if filters:
-                    query = self._apply_filters(query, filters)
-                result = query.delete().execute()
-                duration = time.time() - start_time
-                self._log_query(operation, str(query), duration, "success")
-                QUERY_DURATION.labels(operation=operation).observe(duration)
-                QUERY_COUNT.labels(operation=operation, status="success").inc()
-                return {"success": True, "data": result.data}
+            # If neither PostgreSQL nor Supabase is available
+            raise Exception("No database connection available")
                 
         except Exception as e:
             duration = time.time() - start_time

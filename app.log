@@ -2684,3 +2684,15 @@
 2025-06-19 00:45:19,412 - app.services.notification_service - INFO - Notification service cleaned up
 2025-06-19 00:45:19,412 - app.database - INFO - Database connections closed successfully
 2025-06-19 00:45:19,412 - app.main - INFO - Application shutdown completed
+2025-06-24 22:37:17,294 - app.database - INFO - PostgreSQL connection pool initialized
+2025-06-24 22:37:17,295 - app.database - INFO - Database connections initialized successfully
+2025-06-24 22:37:17,296 - app.services.notification_service - INFO - Email client initialized
+2025-06-24 22:37:17,297 - app.services.notification_service - INFO - SMS client initialized
+2025-06-24 22:37:17,297 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-24 22:37:17,297 - app.main - INFO - Application startup completed
+2025-06-24 22:37:17,298 - app.services.notification_service - ERROR - Failed to process overdue fees: name 'db' is not defined
+2025-06-24 22:37:17,299 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
+2025-06-24 22:37:23,241 - app.services.notification_service - INFO - Notification service cleaned up
+2025-06-24 22:37:23,249 - app.database - INFO - Database pool closed
+2025-06-24 22:37:23,250 - app.database - INFO - Database connections closed successfully
+2025-06-24 22:37:23,250 - app.main - INFO - Application shutdown completed

@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 import jwt
 import bcrypt
 import logging
-from supabase import create_client, Client
 
 from ..models import UserLogin, UserCreate, Token, User, APIResponse
 from ..database import db
@@ -15,14 +14,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["authentication"])
 security = HTTPBearer()
 
-# Initialize Supabase client
-supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
-
 # Test user credentials (for development only)
 TEST_USER = {
-    "email": "test@feemaster.com",
-    "password": "test123",
-    "role": "admin",
+    "email": "admin@feemaster.edu",
+    "password": "admin123",
+    "role": "super_admin",
     "is_active": True,
     "is_verified": True
 }
@@ -68,9 +64,9 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                 detail="Invalid authentication credentials"
             )
         
-        # Get user from profiles table (Supabase Auth integration)
+        # Get user from users table
         result = await db.execute_query(
-            "profiles",
+            "users",
             "select",
             filters={"id": user_id},
             select_fields="*"
@@ -124,35 +120,30 @@ async def login(user_credentials: UserLogin):
                 }
             }
         
-        # Normal login flow with Supabase
+        # Normal login flow with PostgreSQL
         try:
-            # Attempt to sign in with Supabase
-            response = supabase.auth.sign_in_with_password({
-                "email": user_credentials.email,
-                "password": user_credentials.password
-            })
-            
-            if not response.user:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid email or password"
-                )
-            
-            # Get user data from profiles table
+            # Get user from database
             result = await db.execute_query(
-                "profiles",
+                "users",
                 "select",
-                filters={"id": response.user.id},
+                filters={"email": user_credentials.email},
                 select_fields="*"
             )
             
             if not result["success"] or not result["data"]:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="User profile not found in database"
+                    detail="Invalid email or password"
                 )
             
             user = result["data"][0]
+            
+            # Verify password
+            if not verify_password(user_credentials.password, user.get("password_hash", "")):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid email or password"
+                )
             
             if not user.get("is_active", True):
                 raise HTTPException(
@@ -162,7 +153,7 @@ async def login(user_credentials: UserLogin):
             
             # Update last login
             await db.execute_query(
-                "profiles",
+                "users",
                 "update",
                 filters={"id": user["id"]},
                 data={"last_login": datetime.utcnow().isoformat()}
@@ -186,8 +177,10 @@ async def login(user_credentials: UserLogin):
                 "user": user_data
             }
             
+        except HTTPException:
+            raise
         except Exception as e:
-            logger.error(f"Supabase authentication failed: {str(e)}")
+            logger.error(f"Database authentication failed: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
@@ -199,7 +192,7 @@ async def login(user_credentials: UserLogin):
         logger.error(f"Login failed: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Login failed"
+            detail="Internal server error"
         )
 
 @router.post("/register", response_model=APIResponse)
@@ -207,47 +200,59 @@ async def register(user_data: UserCreate):
     """Register a new user"""
     try:
         # Check if user already exists
-        existing = await db.execute_query(
+        existing_user = await db.execute_query(
             "users",
             "select",
             filters={"email": user_data.email},
             select_fields="id"
         )
         
-        if existing["success"] and existing["data"]:
+        if existing_user["success"] and existing_user["data"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered"
+                detail="User with this email already exists"
             )
         
         # Hash password
-        password_hash = get_password_hash(user_data.password)
+        hashed_password = get_password_hash(user_data.password)
         
-        # Create user data
+        # Create user
         user_dict = user_data.dict()
-        del user_dict["password"]
-        user_dict.update({
-            "password_hash": password_hash,
-            "created_at": datetime.utcnow().isoformat(),
-            "is_active": True,
-            "is_verified": False
-        })
+        user_dict["password_hash"] = hashed_password
+        user_dict["created_at"] = datetime.utcnow().isoformat()
+        user_dict["is_active"] = True
+        user_dict["is_verified"] = True  # For now, auto-verify
         
-        # Insert user
+        # Remove plain password
+        user_dict.pop("password", None)
+        
         result = await db.execute_query("users", "insert", data=user_dict)
         
         if not result["success"]:
-            raise HTTPException(status_code=400, detail="Failed to create user")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create user"
+            )
+        
+        created_user = result["data"][0]
+        
+        # Remove sensitive data
+        user_response = {k: v for k, v in created_user.items() if k not in ["password_hash", "password"]}
         
         return APIResponse(
             success=True,
             message="User registered successfully",
-            data={"user_id": result["data"][0]["id"]}
+            data=user_response
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Registration failed: {e}")
-        raise HTTPException(status_code=500, detail="Registration failed")
+        logger.error(f"Registration failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
 
 @router.get("/me", response_model=User)
 async def get_current_user_info(current_user: dict = Depends(get_current_user)):
@@ -257,6 +262,8 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
 @router.post("/logout", response_model=APIResponse)
 async def logout(current_user: dict = Depends(get_current_user)):
     """Logout user (client should discard token)"""
+    # In a stateless JWT system, logout is handled client-side
+    # You could implement a blacklist if needed
     return APIResponse(
         success=True,
         message="Logged out successfully"
@@ -265,20 +272,15 @@ async def logout(current_user: dict = Depends(get_current_user)):
 @router.post("/refresh", response_model=Token)
 async def refresh_token(current_user: dict = Depends(get_current_user)):
     """Refresh access token"""
-    try:
-        # Create new access token
-        access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
-        access_token = create_access_token(
-            data={"sub": current_user["id"], "email": current_user["email"], "role": current_user["role"]},
-            expires_delta=access_token_expires
-        )
-        
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user": current_user
-        }
-        
-    except Exception as e:
-        logger.error(f"Token refresh failed: {e}")
-        raise HTTPException(status_code=500, detail="Token refresh failed") 
+    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    access_token = create_access_token(
+        data={"sub": current_user["id"], "email": current_user["email"], "role": current_user.get("role", "user")},
+        expires_delta=access_token_expires
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": settings.access_token_expire_minutes * 60,
+        "user": current_user
+    } 
