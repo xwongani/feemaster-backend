@@ -205,19 +205,10 @@ class IntegrationService:
 
     async def _test_quickbooks(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Test QuickBooks connection"""
-        try:
-            # Implement QuickBooks API test
-            return {
-                "success": True,
-                "message": "QuickBooks connection successful",
-                "data": {
-                    "api_version": "v3",
-                    "company_info": "Test Company",
-                    "permissions": ["read", "write"]
-                }
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+        return {
+            "success": False,
+            "error": "QuickBooks integration is currently disabled. Install required packages (intuitlib, quickbooks-python) to enable."
+        }
 
     async def _test_whatsapp(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Test WhatsApp Business connection"""
