@@ -2,9 +2,24 @@ import logging
 from typing import Dict, List, Optional
 from datetime import datetime
 import asyncio
-from twilio.rest import Client as TwilioClient
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, To, Content
+
+# Optional imports for notification services
+try:
+    from twilio.rest import Client as TwilioClient
+    TWILIO_AVAILABLE = True
+except ImportError:
+    TWILIO_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("Twilio not available - SMS notifications will be disabled")
+
+try:
+    from sendgrid import SendGridAPIClient
+    from sendgrid.helpers.mail import Mail, Email, To, Content
+    SENDGRID_AVAILABLE = True
+except ImportError:
+    SENDGRID_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("SendGrid not available - email notifications will be disabled")
 
 from ..config import settings
 from ..models import NotificationCreate, NotificationChannel
@@ -54,6 +69,10 @@ class NotificationService:
     async def _initialize_email_client(self):
         """Initialize SendGrid email client"""
         try:
+            if not SENDGRID_AVAILABLE:
+                logger.warning("SendGrid not available - email notifications disabled")
+                return
+                
             self.email_client = SendGridAPIClient(settings.smtp_password)  # SendGrid API key
             logger.info("Email client initialized")
             
@@ -63,6 +82,10 @@ class NotificationService:
     async def _initialize_sms_client(self):
         """Initialize Twilio SMS client"""
         try:
+            if not TWILIO_AVAILABLE:
+                logger.warning("Twilio not available - SMS notifications disabled")
+                return
+                
             self.sms_client = TwilioClient(
                 settings.twilio_account_sid,
                 settings.twilio_auth_token
@@ -111,6 +134,10 @@ class NotificationService:
     async def _send_email(self, notification: NotificationCreate) -> bool:
         """Send email notification using SendGrid"""
         try:
+            if not SENDGRID_AVAILABLE:
+                logger.warning("SendGrid not available - cannot send email")
+                return False
+                
             if not self.email_client:
                 logger.warning("Email client not available")
                 return False
@@ -133,6 +160,10 @@ class NotificationService:
     async def _send_sms(self, notification: NotificationCreate) -> bool:
         """Send SMS notification using Twilio"""
         try:
+            if not TWILIO_AVAILABLE:
+                logger.warning("Twilio not available - cannot send SMS")
+                return False
+                
             if not self.sms_client:
                 logger.warning("SMS client not available")
                 return False
