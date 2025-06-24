@@ -1,4 +1,12 @@
-import redis.asyncio as redis
+# Optional imports for cache service
+try:
+    import redis.asyncio as redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("Redis not available - caching will be disabled")
+
 import json
 import logging
 from typing import Any, Optional
@@ -15,6 +23,10 @@ class CacheService:
     async def initialize(self):
         """Initialize Redis connection"""
         try:
+            if not REDIS_AVAILABLE:
+                logger.warning("Redis not available - caching disabled")
+                return
+                
             if settings.redis_url:
                 self.redis_client = redis.from_url(
                     settings.redis_url,
