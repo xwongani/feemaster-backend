@@ -2598,3 +2598,89 @@
 2025-06-11 18:56:21,987 - app.services.notification_service - INFO - Notification service cleaned up
 2025-06-11 18:56:21,988 - app.database - INFO - Database connections closed successfully
 2025-06-11 18:56:21,988 - app.main - INFO - Application shutdown completed
+2025-06-18 23:21:39,039 - app.database - INFO - Database connections initialized successfully
+2025-06-18 23:21:39,041 - app.services.notification_service - INFO - Email client initialized
+2025-06-18 23:21:39,042 - app.services.notification_service - INFO - SMS client initialized
+2025-06-18 23:21:39,042 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-18 23:21:39,042 - app.main - INFO - Application startup completed
+2025-06-18 23:21:39,042 - app.services.notification_service - ERROR - Failed to process overdue fees: name 'db' is not defined
+2025-06-18 23:21:39,042 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
+2025-06-18 23:53:47,842 - app.database - INFO - Database connections initialized successfully
+2025-06-18 23:53:47,843 - app.services.notification_service - INFO - Email client initialized
+2025-06-18 23:53:47,844 - app.services.notification_service - INFO - SMS client initialized
+2025-06-18 23:53:47,844 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-18 23:53:47,844 - app.main - INFO - Application startup completed
+2025-06-18 23:53:47,845 - app.services.notification_service - ERROR - Failed to process overdue fees: name 'db' is not defined
+2025-06-18 23:53:47,845 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
+2025-06-18 23:58:09,360 - app.database - WARNING - Slow query detected: 2.74s - <postgrest._sync.request_builder.SyncSelectRequestBuilder object at 0x7f29097ecbb0>
+2025-06-18 23:58:09,360 - app.database - ERROR - Query execution failed: [Errno -2] Name or service not known
+2025-06-19 00:10:57,060 - app.services.notification_service - INFO - Notification service cleaned up
+2025-06-19 00:10:57,061 - app.database - INFO - Database connections closed successfully
+2025-06-19 00:10:57,061 - app.main - INFO - Application shutdown completed
+2025-06-19 00:11:08,372 - app.database - INFO - Database connections initialized successfully
+2025-06-19 00:11:08,372 - app.services.notification_service - INFO - Email client initialized
+2025-06-19 00:11:08,372 - app.services.notification_service - INFO - SMS client initialized
+2025-06-19 00:11:08,373 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-19 00:11:08,373 - app.main - INFO - Application startup completed
+2025-06-19 00:11:08,373 - app.services.notification_service - ERROR - Failed to process overdue fees: name 'db' is not defined
+2025-06-19 00:11:08,373 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
+2025-06-19 00:30:57,018 - app.routes.auth - INFO - Login attempt for email: test@feemaster.com
+2025-06-19 00:30:57,022 - app.routes.auth - INFO - Test user login successful
+2025-06-19 00:30:57,030 - app.main - ERROR - Global exception: 1 validation errors:
+  {'type': 'missing', 'loc': ('response', 'expires_in'), 'msg': 'Field required', 'input': {'access_token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXItaWQiLCJlbWFpbCI6InRlc3RAZmVlbWFzdGVyLmNvbSIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc1MDUwMTg1N30.hxmwMlguCnqxFmITYCnue5NCs8Q9HAzv84iDbczD1jQ', 'token_type': 'bearer', 'user': {'id': 'test-user-id', 'email': 'test@feemaster.com', 'role': 'admin', 'is_active': True, 'is_verified': True}}}
+
+2025-06-19 00:31:18,109 - app.services.notification_service - INFO - Notification service cleaned up
+2025-06-19 00:31:18,109 - app.database - INFO - Database connections closed successfully
+2025-06-19 00:31:18,109 - app.main - INFO - Application shutdown completed
+2025-06-19 00:31:19,423 - app.database - INFO - Database connections initialized successfully
+2025-06-19 00:31:19,424 - app.services.notification_service - INFO - Email client initialized
+2025-06-19 00:31:19,424 - app.services.notification_service - INFO - SMS client initialized
+2025-06-19 00:31:19,424 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-19 00:31:19,424 - app.main - INFO - Application startup completed
+2025-06-19 00:31:19,425 - app.services.notification_service - ERROR - Failed to process overdue fees: name 'db' is not defined
+2025-06-19 00:31:19,425 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
+2025-06-19 00:31:22,782 - app.routes.auth - INFO - Login attempt for email: test@feemaster.com
+2025-06-19 00:31:22,782 - app.routes.auth - INFO - Test user login successful
+2025-06-19 00:34:54,044 - app.services.notification_service - INFO - Notification service cleaned up
+2025-06-19 00:34:54,044 - app.database - INFO - Database connections closed successfully
+2025-06-19 00:34:54,044 - app.main - INFO - Application shutdown completed
+2025-06-19 00:34:56,549 - app.database - INFO - Database connections initialized successfully
+2025-06-19 00:34:56,549 - app.services.notification_service - INFO - Email client initialized
+2025-06-19 00:34:56,549 - app.services.notification_service - INFO - SMS client initialized
+2025-06-19 00:34:56,549 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-19 00:34:56,550 - app.main - INFO - Application startup completed
+2025-06-19 00:34:56,550 - app.services.notification_service - ERROR - Failed to process overdue fees: name 'db' is not defined
+2025-06-19 00:34:56,550 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
+2025-06-19 00:37:33,390 - app.services.notification_service - INFO - Notification service cleaned up
+2025-06-19 00:37:33,391 - app.database - INFO - Database connections closed successfully
+2025-06-19 00:37:33,391 - app.main - INFO - Application shutdown completed
+2025-06-19 00:37:35,610 - app.database - INFO - Database connections initialized successfully
+2025-06-19 00:37:35,610 - app.services.notification_service - INFO - Email client initialized
+2025-06-19 00:37:35,611 - app.services.notification_service - INFO - SMS client initialized
+2025-06-19 00:37:35,611 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-19 00:37:35,611 - app.main - INFO - Application startup completed
+2025-06-19 00:37:35,611 - app.services.notification_service - ERROR - Failed to process overdue fees: name 'db' is not defined
+2025-06-19 00:37:35,611 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
+2025-06-19 00:37:43,272 - app.services.notification_service - INFO - Notification service cleaned up
+2025-06-19 00:37:43,272 - app.database - INFO - Database connections closed successfully
+2025-06-19 00:37:43,272 - app.main - INFO - Application shutdown completed
+2025-06-19 00:37:45,277 - app.database - INFO - Database connections initialized successfully
+2025-06-19 00:37:45,278 - app.services.notification_service - INFO - Email client initialized
+2025-06-19 00:37:45,278 - app.services.notification_service - INFO - SMS client initialized
+2025-06-19 00:37:45,279 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-19 00:37:45,279 - app.main - INFO - Application startup completed
+2025-06-19 00:37:45,279 - app.services.notification_service - ERROR - Failed to process overdue fees: name 'db' is not defined
+2025-06-19 00:37:45,279 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
+2025-06-19 00:37:53,699 - app.services.notification_service - INFO - Notification service cleaned up
+2025-06-19 00:37:53,699 - app.database - INFO - Database connections closed successfully
+2025-06-19 00:37:53,699 - app.main - INFO - Application shutdown completed
+2025-06-19 00:37:55,676 - app.database - INFO - Database connections initialized successfully
+2025-06-19 00:37:55,676 - app.services.notification_service - INFO - Email client initialized
+2025-06-19 00:37:55,676 - app.services.notification_service - INFO - SMS client initialized
+2025-06-19 00:37:55,677 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-19 00:37:55,677 - app.main - INFO - Application startup completed
+2025-06-19 00:37:55,677 - app.services.notification_service - ERROR - Failed to process overdue fees: name 'db' is not defined
+2025-06-19 00:37:55,677 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
+2025-06-19 00:45:19,412 - app.services.notification_service - INFO - Notification service cleaned up
+2025-06-19 00:45:19,412 - app.database - INFO - Database connections closed successfully
+2025-06-19 00:45:19,412 - app.main - INFO - Application shutdown completed

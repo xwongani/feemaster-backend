@@ -19,6 +19,7 @@ A comprehensive FastAPI backend for school fee management system with payment pr
 - **Authentication**: JWT with bcrypt password hashing
 - **Validation**: Pydantic models
 - **Documentation**: Auto-generated OpenAPI/Swagger docs
+- **Version**: 2.1.0
 
 ## Quick Start
 
@@ -27,7 +28,7 @@ A comprehensive FastAPI backend for school fee management system with payment pr
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd backend
+cd feemaster-backend
 
 # Create virtual environment
 python -m venv venv
@@ -37,46 +38,79 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Database Setup
+### 2. Database Setup (Local PostgreSQL)
 
-**Option A: PostgreSQL**
 ```bash
-# Install PostgreSQL and create database
-createdb feemaster
+# Install PostgreSQL (Ubuntu/Debian)
+sudo apt update && sudo apt install postgresql postgresql-contrib
+# Or on Arch: sudo pacman -S postgresql
+# Or on Mac: brew install postgresql
 
-# Run the schema
-psql -d feemaster -f schema.sql
+# Start PostgreSQL service
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Create database and user
+sudo -u postgres psql
+CREATE DATABASE feemaster;
+CREATE USER feemaster_user WITH PASSWORD 'yourpassword';
+GRANT ALL PRIVILEGES ON DATABASE feemaster TO feemaster_user;
+\q
+
+# Run the setup script
+python3 sql/setup_postgresql.py
 ```
-
-**Option B: Supabase**
-1. Create a new project at [supabase.com](https://supabase.com)
-2. Copy the SQL from `schema.sql` and run it in the Supabase SQL editor
-3. Update your `.env` file with Supabase credentials
 
 ### 3. Environment Configuration
 
 ```bash
-# Copy environment template
 cp .env.example .env
-
-# Edit .env with your configuration
 nano .env
 ```
 
-Key settings to configure:
-- `DATABASE_URL` or Supabase credentials
-- `SECRET_KEY` (generate a secure random key)
-- Email/SMS/WhatsApp settings (optional)
+#### Required Database Environment Variables
+
+For PostgreSQL:
+```env
+DATABASE_URL=postgresql://feemaster_user:yourpassword@localhost/feemaster
+```
+For Supabase:
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_KEY=your-service-key
+```
+
+#### Other Important Variables
+```env
+SECRET_KEY=your-super-secret-key-here
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+CORS_ORIGINS=http://localhost:3000,http://localhost:3001
+# ... (see .env.example for all options)
+```
 
 ### 4. Run the Application
 
 ```bash
 # Start the development server
 python main.py
-
 # Or use uvicorn directly
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+### 5. Deploying to Render
+
+1. Push your code to GitHub.
+2. In Render, create a new Web Service and connect your repo.
+3. Set the build and start commands:
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** leave blank (Render will use the Procfile)
+4. Add all required environment variables in the Render dashboard.
+5. Render will use the `Procfile`:
+   ```
+   web: gunicorn app.main:app --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+   ```
+6. Click "Deploy".
 
 The API will be available at:
 - **API**: http://localhost:8000
@@ -195,9 +229,10 @@ Key configuration options in `.env`:
 
 ```env
 # Database
-DATABASE_URL=postgresql://user:password@localhost/feemaster
+DATABASE_URL=postgresql://feemaster_user:yourpassword@localhost/feemaster
 # OR use Supabase
 SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_KEY=your-service-key
 
 # Security
@@ -211,6 +246,12 @@ CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 ENABLE_NOTIFICATIONS=true
 ENABLE_RECEIPTS=true
 ENABLE_INTEGRATIONS=true
+ENABLE_ANALYTICS=true
+ENABLE_REPORTS=true
+ENABLE_PARENT_PORTAL=true
+ENABLE_ATTENDANCE=true
+
+# Email/SMS/WhatsApp/Storage/Payment/QuickBooks/Redis settings as needed
 ```
 
 ### School Settings

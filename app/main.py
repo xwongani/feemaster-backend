@@ -15,7 +15,7 @@ from app.config import settings
 from app.database import db
 
 # Import all route modules
-from app.routes import auth, students, payments, dashboard, reports, integrations, settings as settings_routes, financial, parents, quickbooks
+from app.routes import auth, students, payments, dashboard, reports, integrations, settings as settings_routes, financial, parents, quickbooks, errors
 
 # Import models
 from app.models import (
@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Fee Master - School Administration System",
     description="Comprehensive school fee management system with payment processing, student management, financial reporting, and integrations",
-    version="2.0.0",
+    version="2.1.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -76,6 +76,7 @@ app.include_router(settings_routes.router, prefix="/api/v1")
 app.include_router(financial.router, prefix="/api/v1")
 app.include_router(parents.router, prefix="/api/v1")
 app.include_router(quickbooks.router, prefix="/api/v1")
+app.include_router(errors.router, prefix="/api/v1")
 
 # Authentication dependency
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -99,7 +100,7 @@ async def health_check():
     return {
         "status": "healthy", 
         "timestamp": datetime.utcnow().isoformat(),
-        "version": "2.0.0",
+        "version": "2.1.0",
         "service": "Fee Master Backend"
     }
 
@@ -109,7 +110,7 @@ async def root():
     """Root endpoint with API information"""
     return {
         "message": "Fee Master API",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "docs": "/docs",
         "health": "/health"
     }

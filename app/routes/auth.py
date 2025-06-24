@@ -68,9 +68,9 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                 detail="Invalid authentication credentials"
             )
         
-        # Get user from database
+        # Get user from profiles table (Supabase Auth integration)
         result = await db.execute_query(
-            "users",
+            "profiles",
             "select",
             filters={"id": user_id},
             select_fields="*"
@@ -114,6 +114,7 @@ async def login(user_credentials: UserLogin):
             return {
                 "access_token": access_token,
                 "token_type": "bearer",
+                "expires_in": settings.access_token_expire_minutes * 60,  # Convert to seconds
                 "user": {
                     "id": "test-user-id",
                     "email": TEST_USER["email"],
@@ -137,18 +138,18 @@ async def login(user_credentials: UserLogin):
                     detail="Invalid email or password"
                 )
             
-            # Get user data from our database
+            # Get user data from profiles table
             result = await db.execute_query(
-                "users",
+                "profiles",
                 "select",
-                filters={"email": user_credentials.email},
+                filters={"id": response.user.id},
                 select_fields="*"
             )
             
             if not result["success"] or not result["data"]:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="User not found in database"
+                    detail="User profile not found in database"
                 )
             
             user = result["data"][0]
@@ -161,7 +162,7 @@ async def login(user_credentials: UserLogin):
             
             # Update last login
             await db.execute_query(
-                "users",
+                "profiles",
                 "update",
                 filters={"id": user["id"]},
                 data={"last_login": datetime.utcnow().isoformat()}
@@ -181,6 +182,7 @@ async def login(user_credentials: UserLogin):
             return {
                 "access_token": access_token,
                 "token_type": "bearer",
+                "expires_in": settings.access_token_expire_minutes * 60,
                 "user": user_data
             }
             

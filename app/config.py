@@ -9,7 +9,7 @@ load_dotenv()
 class Settings(BaseSettings):
     # Application Settings
     app_name: str = "Fee Master Backend"
-    version: str = "2.0.0"
+    version: str = "2.1.0"
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
     host: str = "0.0.0.0"
     port: int = 8000

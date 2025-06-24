@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta
 from intuitlib.client import AuthClient
 from intuitlib.enums import Scopes
 from quickbooks.client import QuickBooks
@@ -8,6 +8,12 @@ from quickbooks.objects.customer import Customer
 from quickbooks.objects.invoice import Invoice
 from quickbooks.objects.payment import Payment
 from quickbooks.objects.account import Account
+import json
+import os
+import base64
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from ..config import settings
 from ..database import db
@@ -23,6 +29,12 @@ class QuickBooksService:
         self.access_token = None
         self.refresh_token = None
         self.token_expiry = None
+        self.cache_dir = "quickbooks_cache"
+        self.encryption_key = None
+        
+        # Ensure cache directory exists
+        if not os.path.exists(self.cache_dir):
+            os.makedirs(self.cache_dir)
     
     async def initialize(self):
         """Initialize QuickBooks client"""
@@ -34,6 +46,9 @@ class QuickBooksService:
                     environment=settings.quickbooks_environment,
                     redirect_uri=settings.quickbooks_redirect_uri
                 )
+                
+                # Initialize encryption key
+                await self._initialize_encryption()
                 
                 # Load saved tokens from database
                 tokens = await self._load_tokens()
@@ -61,6 +76,83 @@ class QuickBooksService:
                 
         except Exception as e:
             logger.error(f"Failed to initialize QuickBooks service: {e}")
+    
+    async def _initialize_encryption(self):
+        """Initialize encryption key for local cache"""
+        try:
+            # Use a combination of settings for key derivation
+            salt = settings.quickbooks_client_secret.encode()[:16]
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=salt,
+                iterations=100000,
+            )
+            key = base64.urlsafe_b64encode(kdf.derive(settings.quickbooks_client_id.encode()))
+            self.encryption_key = Fernet(key)
+            logger.info("Encryption key initialized for QuickBooks cache")
+        except Exception as e:
+            logger.error(f"Failed to initialize encryption: {e}")
+            self.encryption_key = None
+    
+    def _encrypt_data(self, data: str) -> str:
+        """Encrypt data for local storage"""
+        if not self.encryption_key:
+            raise Exception("Encryption key not initialized")
+        return self.encryption_key.encrypt(data.encode()).decode()
+    
+    def _decrypt_data(self, encrypted_data: str) -> str:
+        """Decrypt data from local storage"""
+        if not self.encryption_key:
+            raise Exception("Encryption key not initialized")
+        return self.encryption_key.decrypt(encrypted_data.encode()).decode()
+    
+    def _get_cache_file_path(self, filename: str) -> str:
+        """Get full path for cache file"""
+        return os.path.join(self.cache_dir, filename)
+    
+    async def _save_to_cache(self, filename: str, data: Dict) -> bool:
+        """Save encrypted data to local cache"""
+        try:
+            file_path = self._get_cache_file_path(filename)
+            encrypted_data = self._encrypt_data(json.dumps(data))
+            
+            with open(file_path, 'w') as f:
+                f.write(encrypted_data)
+            
+            logger.info(f"Data saved to cache: {filename}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save to cache {filename}: {e}")
+            return False
+    
+    async def _load_from_cache(self, filename: str) -> Optional[Dict]:
+        """Load and decrypt data from local cache"""
+        try:
+            file_path = self._get_cache_file_path(filename)
+            if not os.path.exists(file_path):
+                return None
+            
+            with open(file_path, 'r') as f:
+                encrypted_data = f.read()
+            
+            decrypted_data = self._decrypt_data(encrypted_data)
+            return json.loads(decrypted_data)
+        except Exception as e:
+            logger.error(f"Failed to load from cache {filename}: {e}")
+            return None
+    
+    async def _delete_cache_file(self, filename: str) -> bool:
+        """Delete cache file"""
+        try:
+            file_path = self._get_cache_file_path(filename)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                logger.info(f"Cache file deleted: {filename}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete cache file {filename}: {e}")
+            return False
     
     async def _load_tokens(self) -> Optional[Dict]:
         """Load QuickBooks tokens from database"""
@@ -354,6 +446,212 @@ class QuickBooksService:
         except Exception as e:
             logger.error(f"Failed to get QuickBooks payment methods: {e}")
             return []
+    
+    async def sync_payments_to_cache(self, days_back: int = 30) -> Dict:
+        """Sync payment data from QuickBooks to encrypted local cache"""
+        try:
+            if not self.initialized:
+                return {"success": False, "error": "QuickBooks client not initialized"}
+            
+            # Calculate date range
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days_back)
+            
+            # Fetch payments from QuickBooks
+            payments = Payment.filter(
+                TxnDate__gte=start_date.strftime("%Y-%m-%d"),
+                TxnDate__lte=end_date.strftime("%Y-%m-%d"),
+                qb=self.client
+            )
+            
+            payment_data = []
+            for payment in payments:
+                payment_info = {
+                    "id": payment.Id,
+                    "customer_ref": payment.CustomerRef.value if payment.CustomerRef else None,
+                    "amount": float(payment.TotalAmt),
+                    "payment_method": payment.PaymentMethodRef.value if payment.PaymentMethodRef else None,
+                    "date": payment.TxnDate,
+                    "memo": payment.PrivateNote,
+                    "status": "completed"
+                }
+                payment_data.append(payment_info)
+            
+            # Save to cache with metadata
+            cache_data = {
+                "sync_timestamp": datetime.utcnow().isoformat(),
+                "date_range": {
+                    "start": start_date.isoformat(),
+                    "end": end_date.isoformat()
+                },
+                "total_payments": len(payment_data),
+                "payments": payment_data
+            }
+            
+            success = await self._save_to_cache("payments.json", cache_data)
+            
+            if success:
+                # Update sync status in database
+                await self._update_sync_status("payments", True, len(payment_data))
+                return {
+                    "success": True,
+                    "data": {
+                        "total_payments": len(payment_data),
+                        "date_range": cache_data["date_range"],
+                        "sync_timestamp": cache_data["sync_timestamp"]
+                    }
+                }
+            else:
+                await self._update_sync_status("payments", False, 0, "Failed to save to cache")
+                return {"success": False, "error": "Failed to save payment data to cache"}
+                
+        except Exception as e:
+            logger.error(f"Failed to sync payments to cache: {e}")
+            await self._update_sync_status("payments", False, 0, str(e))
+            return {"success": False, "error": str(e)}
+    
+    async def get_payment_analytics(self) -> Dict:
+        """Get payment analytics from local cache"""
+        try:
+            cache_data = await self._load_from_cache("payments.json")
+            if not cache_data:
+                return {"success": False, "error": "No payment data available in cache"}
+            
+            payments = cache_data.get("payments", [])
+            
+            # Calculate analytics
+            total_amount = sum(p["amount"] for p in payments)
+            payment_methods = {}
+            daily_totals = {}
+            
+            for payment in payments:
+                # Payment methods breakdown
+                method = payment.get("payment_method", "Unknown")
+                if method not in payment_methods:
+                    payment_methods[method] = {"count": 0, "amount": 0}
+                payment_methods[method]["count"] += 1
+                payment_methods[method]["amount"] += payment["amount"]
+                
+                # Daily totals
+                date = payment.get("date", "")
+                if date not in daily_totals:
+                    daily_totals[date] = 0
+                daily_totals[date] += payment["amount"]
+            
+            # Sort daily totals by date
+            sorted_daily = sorted(daily_totals.items())
+            
+            analytics = {
+                "summary": {
+                    "total_payments": len(payments),
+                    "total_amount": total_amount,
+                    "average_payment": total_amount / len(payments) if payments else 0,
+                    "sync_timestamp": cache_data.get("sync_timestamp"),
+                    "date_range": cache_data.get("date_range")
+                },
+                "payment_methods": [
+                    {
+                        "method": method,
+                        "count": data["count"],
+                        "amount": data["amount"],
+                        "percentage": (data["amount"] / total_amount * 100) if total_amount > 0 else 0
+                    }
+                    for method, data in payment_methods.items()
+                ],
+                "daily_trends": [
+                    {"date": date, "amount": amount}
+                    for date, amount in sorted_daily
+                ]
+            }
+            
+            return {"success": True, "data": analytics}
+            
+        except Exception as e:
+            logger.error(f"Failed to get payment analytics: {e}")
+            return {"success": False, "error": str(e)}
+    
+    async def get_sync_status(self) -> Dict:
+        """Get QuickBooks sync status"""
+        try:
+            # Get last sync status from database
+            result = await db.execute_query(
+                "quickbooks_sync_logs",
+                "select",
+                filters={"sync_type": "payments"},
+                order_by="created_at DESC",
+                limit=1
+            )
+            
+            if result["success"] and result["data"]:
+                last_sync = result["data"][0]
+                return {
+                    "success": True,
+                    "data": {
+                        "connected": self.initialized,
+                        "last_sync": last_sync.get("created_at"),
+                        "last_sync_success": last_sync.get("success"),
+                        "records_synced": last_sync.get("records_synced", 0),
+                        "error_message": last_sync.get("error_message"),
+                        "realm_id": self.realm_id
+                    }
+                }
+            else:
+                return {
+                    "success": True,
+                    "data": {
+                        "connected": self.initialized,
+                        "last_sync": None,
+                        "last_sync_success": False,
+                        "records_synced": 0,
+                        "error_message": "No sync history found",
+                        "realm_id": self.realm_id
+                    }
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to get sync status: {e}")
+            return {"success": False, "error": str(e)}
+    
+    async def _update_sync_status(self, sync_type: str, success: bool, records_synced: int, error_message: str = None):
+        """Update sync status in database"""
+        try:
+            await db.execute_query(
+                "quickbooks_sync_logs",
+                "insert",
+                data={
+                    "sync_type": sync_type,
+                    "success": success,
+                    "records_synced": records_synced,
+                    "error_message": error_message,
+                    "created_at": datetime.utcnow().isoformat()
+                }
+            )
+        except Exception as e:
+            logger.error(f"Failed to update sync status: {e}")
+    
+    async def clear_cache(self) -> Dict:
+        """Clear all cached QuickBooks data"""
+        try:
+            # Delete all cache files
+            cache_files = ["payments.json"]
+            deleted_count = 0
+            
+            for filename in cache_files:
+                if await self._delete_cache_file(filename):
+                    deleted_count += 1
+            
+            logger.info(f"Cleared {deleted_count} cache files")
+            return {
+                "success": True,
+                "data": {
+                    "deleted_files": deleted_count,
+                    "message": "Cache cleared successfully"
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to clear cache: {e}")
+            return {"success": False, "error": str(e)}
 
 # Create singleton instance
 quickbooks_service = QuickBooksService() 

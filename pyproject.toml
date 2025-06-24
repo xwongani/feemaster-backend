@@ -1,6 +1,6 @@
 pip install "numpy<1.26.2"[project]
 name = "fee-master-backend"
-version = "2.0.0"
+version = "2.1.0"
 description = "Fee Master Backend - School Administration System"
 authors = [
     {name = "Fee Master Team", email = "info@feemaster.edu"}

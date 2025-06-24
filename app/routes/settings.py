@@ -415,7 +415,7 @@ async def get_system_settings(current_user: dict = Depends(get_current_user)):
                 "lockout_duration": 15  # minutes
             },
             "system_info": {
-                "version": "2.0.0",
+                "version": "2.1.0",
                 "database_version": "PostgreSQL 14.2",
                 "uptime": "15 days, 3 hours",
                 "last_update": "2024-01-01T00:00:00Z"

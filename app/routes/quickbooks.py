@@ -1,5 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends, status
-from typing import Dict, List
+from fastapi import APIRouter, HTTPException, Depends, status, Query
+from typing import Dict, List, Optional
 
 from ..models import APIResponse
 from ..services.quickbooks_service import quickbooks_service
@@ -61,6 +61,97 @@ async def sync_payment(payment_data: Dict, current_user: dict = Depends(get_test
             return APIResponse(
                 success=True,
                 message="Payment synced to QuickBooks successfully",
+                data=result["data"]
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result["error"]
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@router.post("/sync-payments-to-cache")
+async def sync_payments_to_cache(
+    days_back: int = Query(30, description="Number of days to sync back"),
+    current_user: dict = Depends(get_test_user)
+):
+    """Sync payment data from QuickBooks to encrypted local cache"""
+    try:
+        result = await quickbooks_service.sync_payments_to_cache(days_back)
+        if result["success"]:
+            return APIResponse(
+                success=True,
+                message="Payments synced to cache successfully",
+                data=result["data"]
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result["error"]
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@router.get("/analytics/payments")
+async def get_payment_analytics(current_user: dict = Depends(get_test_user)):
+    """Get payment analytics from local cache"""
+    try:
+        result = await quickbooks_service.get_payment_analytics()
+        if result["success"]:
+            return APIResponse(
+                success=True,
+                message="Payment analytics retrieved successfully",
+                data=result["data"]
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result["error"]
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@router.get("/sync-status")
+async def get_sync_status(current_user: dict = Depends(get_test_user)):
+    """Get QuickBooks sync status"""
+    try:
+        result = await quickbooks_service.get_sync_status()
+        if result["success"]:
+            return APIResponse(
+                success=True,
+                message="Sync status retrieved successfully",
+                data=result["data"]
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result["error"]
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+@router.post("/clear-cache")
+async def clear_cache(current_user: dict = Depends(get_test_user)):
+    """Clear all cached QuickBooks data"""
+    try:
+        result = await quickbooks_service.clear_cache()
+        if result["success"]:
+            return APIResponse(
+                success=True,
+                message="Cache cleared successfully",
                 data=result["data"]
             )
         else:

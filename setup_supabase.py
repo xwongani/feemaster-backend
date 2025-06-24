@@ -84,7 +84,7 @@ async def create_env_file():
     """Create a .env file with default values"""
     env_content = """# Application Settings
 APP_NAME=Fee Master Backend
-VERSION=2.0.0
+VERSION=2.1.0
 DEBUG=True
 HOST=0.0.0.0
 PORT=8000
