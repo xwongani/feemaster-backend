@@ -1,5 +1,13 @@
-from twilio.rest import Client
-from twilio.base.exceptions import TwilioRestException
+# Optional imports for Twilio service
+try:
+    from twilio.rest import Client
+    from twilio.base.exceptions import TwilioRestException
+    TWILIO_AVAILABLE = True
+except ImportError:
+    TWILIO_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("Twilio not available - SMS service will be disabled")
+
 from typing import List, Dict, Optional
 import logging
 from ..config import settings
@@ -8,12 +16,25 @@ logger = logging.getLogger(__name__)
 
 class TwilioService:
     def __init__(self):
+        if not TWILIO_AVAILABLE:
+            logger.warning("Twilio not available - SMS service disabled")
+            self.client = None
+            self.from_number = None
+            return
+            
         self.client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
         self.from_number = settings.twilio_phone_number
 
     async def send_sms(self, to_number: str, message: str) -> Dict:
         """Send a single SMS message"""
         try:
+            if not TWILIO_AVAILABLE or not self.client:
+                logger.warning("Twilio not available - cannot send SMS")
+                return {
+                    "success": False,
+                    "error": "Twilio service not available"
+                }
+                
             message = self.client.messages.create(
                 body=message,
                 from_=self.from_number,
