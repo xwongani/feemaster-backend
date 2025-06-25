@@ -1,7 +1,8 @@
 import uvicorn
 import logging
-from fastapi import FastAPI, HTTPException, Depends, Query, status
+from fastapi import FastAPI, HTTPException, Depends, Query, status, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import List, Optional, Dict, Any
@@ -10,6 +11,7 @@ import asyncio
 import csv
 import io
 import os
+import time
 
 # Import settings first
 from app.config import settings
@@ -64,10 +66,10 @@ from app.services.analytics_service import analytics_service
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=getattr(logging, settings.log_level.upper()),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler('app.log'),
+        logging.FileHandler(settings.log_file),
         logging.StreamHandler()
     ]
 )
@@ -75,11 +77,11 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Fee Master - School Administration System",
-    description="Comprehensive school fee management system with payment processing, student management, financial reporting, and integrations",
-    version="2.1.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    title="Fee Master Backend API",
+    description="Comprehensive school fee management system backend",
+    version="2.0.0",
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None
 )
 
 # Security
@@ -88,26 +90,38 @@ security = HTTPBearer()
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include all route modules
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(students.router, prefix="/api/v1")
-app.include_router(payments.router, prefix="/api/v1")
-app.include_router(dashboard.router, prefix="/api/v1")
-app.include_router(reports.router, prefix="/api/v1")
-app.include_router(integrations.router, prefix="/api/v1")
-app.include_router(settings_routes.router, prefix="/api/v1")
-app.include_router(financial.router, prefix="/api/v1")
-app.include_router(parents.router, prefix="/api/v1")
-app.include_router(quickbooks.router, prefix="/api/v1")
-app.include_router(errors.router, prefix="/api/v1")
-app.include_router(parent_portal.router, prefix="/api/v1")
-app.include_router(test_sentry.router, prefix="/api/v1")
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["*"] if settings.debug else ["your-domain.com"]
+)
+
+# Request timing middleware
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    return response
+
+# Error handling middleware
+@app.middleware("http")
+async def error_handling_middleware(request: Request, call_next):
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        logger.error(f"Unhandled error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": "Internal server error"}
+        )
 
 # Authentication dependency
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -128,22 +142,83 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {
-        "status": "healthy", 
-        "timestamp": datetime.utcnow().isoformat(),
-        "version": "2.1.0",
-        "service": "Fee Master Backend"
-    }
+    try:
+        # Check database connection
+        db_status = await db.check_connection()
+        
+        # Check service status
+        services_status = {
+            "analytics": analytics_service.initialized,
+            "cache": cache_service.initialized,
+            "integration": integration_service.initialized,
+            "notification": notification_service.initialized,
+            "quickbooks": quickbooks_service.initialized,
+            "receipt": receipt_service.initialized,
+            "twilio": twilio_service.initialized,
+            "payment_gateway": payment_gateway_service.initialized,
+            "whatsapp": whatsapp_service.initialized,
+            "websocket": websocket_service.initialized,
+            "audit": audit_service.initialized,
+            "bulk_operations": bulk_operations_service.initialized
+        }
+        
+        return {
+            "status": "healthy",
+            "database": db_status,
+            "services": services_status,
+            "timestamp": time.time()
+        }
+        
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "error": str(e)}
+        )
 
 # Root endpoint
 @app.get("/")
 async def root():
-    """Root endpoint with API information"""
+    """Root endpoint"""
     return {
-        "message": "Fee Master API",
-        "version": "2.1.0",
-        "docs": "/docs",
-        "health": "/health"
+        "message": "Fee Master Backend API",
+        "version": "2.0.0",
+        "status": "running",
+        "docs": "/docs" if settings.debug else None
+    }
+
+# API info endpoint
+@app.get("/api/v1/info")
+async def api_info():
+    """API information endpoint"""
+    return {
+        "name": "Fee Master Backend API",
+        "version": "2.0.0",
+        "description": "Comprehensive school fee management system",
+        "features": [
+            "Student Management",
+            "Fee Management",
+            "Payment Processing",
+            "Parent Portal",
+            "Reporting & Analytics",
+            "QuickBooks Integration",
+            "Payment Gateway Integration",
+            "WhatsApp Integration",
+            "Real-time Notifications",
+            "Advanced Analytics",
+            "Bulk Operations",
+            "Audit Trail",
+            "WebSocket Support"
+        ],
+        "integrations": [
+            "QuickBooks",
+            "Stripe",
+            "PayPal",
+            "WhatsApp Business API",
+            "Twilio SMS"
+        ],
+        "environment": settings.environment,
+        "debug": settings.debug
     }
 
 # Global exception handler
@@ -178,36 +253,59 @@ async def http_exception_handler(request, exc):
 async def startup_event():
     """Initialize services on startup"""
     try:
+        logger.info("Starting Fee Master Backend...")
+        
         # Initialize database
-        await db.connect()
+        await db.initialize()
+        logger.info("Database initialized")
         
-        # Initialize notification service
-        await notification_service.initialize()
+        # Initialize services
+        services = [
+            analytics_service,
+            cache_service,
+            integration_service,
+            notification_service,
+            quickbooks_service,
+            receipt_service,
+            twilio_service,
+            payment_gateway_service,
+            whatsapp_service,
+            websocket_service,
+            audit_service,
+            bulk_operations_service
+        ]
         
-        # Start overdue reminders scheduler
-        asyncio.create_task(notification_service.schedule_overdue_reminders())
+        for service in services:
+            try:
+                await service.initialize()
+                logger.info(f"{service.__class__.__name__} initialized")
+            except Exception as e:
+                logger.error(f"Failed to initialize {service.__class__.__name__}: {e}")
         
-        logger.info("Application startup completed")
+        logger.info("Fee Master Backend started successfully")
         
     except Exception as e:
-        logger.error(f"Startup failed: {e}")
+        logger.error(f"Failed to start application: {e}")
         raise
 
 # Application shutdown
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Cleanup services on shutdown"""
+    """Cleanup on shutdown"""
     try:
-        # Cleanup notification service
-        await notification_service.cleanup()
+        logger.info("Shutting down Fee Master Backend...")
+        
+        # Cleanup services
+        if hasattr(whatsapp_service, 'cleanup'):
+            await whatsapp_service.cleanup()
         
         # Close database connections
-        await db.disconnect()
+        await db.close()
         
-        logger.info("Application shutdown completed")
+        logger.info("Fee Master Backend shutdown complete")
         
     except Exception as e:
-        logger.error(f"Shutdown failed: {e}")
+        logger.error(f"Error during shutdown: {e}")
 
 if __name__ == "__main__":
     uvicorn.run(

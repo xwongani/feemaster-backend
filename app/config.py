@@ -114,6 +114,21 @@ class Settings(BaseSettings):
     enable_parent_portal: bool = True
     enable_attendance: bool = True
     
+    # New external integrations and advanced features
+    upload_folder: str = "uploads"
+    allowed_extensions: list = [".jpg", ".jpeg", ".png", ".pdf", ".doc", ".docx"]
+    analytics_enabled: bool = True
+    analytics_cache_ttl: int = 3600  # 1 hour
+    websocket_enabled: bool = True
+    websocket_cleanup_interval: int = 3600  # 1 hour
+    audit_trail_enabled: bool = True
+    audit_retention_days: int = 365
+    bulk_operation_max_records: int = 1000
+    bulk_operation_timeout: int = 300  # 5 minutes
+    report_generation_enabled: bool = True
+    report_storage_path: str = "reports"
+    report_retention_days: int = 90
+    
     @property
     def cors_origins_list(self) -> List[str]:
         """Convert cors_origins string to list"""
