@@ -16,6 +16,7 @@ from app.database import db
 
 # Import all route modules
 from app.routes import auth, students, payments, dashboard, reports, integrations, settings as settings_routes, financial, parents, quickbooks, errors
+from app.routes import parent_portal
 
 # Import models
 from app.models import (
@@ -77,6 +78,7 @@ app.include_router(financial.router, prefix="/api/v1")
 app.include_router(parents.router, prefix="/api/v1")
 app.include_router(quickbooks.router, prefix="/api/v1")
 app.include_router(errors.router, prefix="/api/v1")
+app.include_router(parent_portal.router, prefix="/api/v1")
 
 # Authentication dependency
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
