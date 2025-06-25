@@ -93,6 +93,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_file: str = "app.log"
     
+    # Sentry Settings
+    sentry_dsn: Optional[str] = os.getenv("SENTRY_DSN", None)
+    environment: str = os.getenv("ENVIRONMENT", "development")
+    
     # School Settings (will be loaded from database)
     default_school_name: str = "Fee Master Academy"
     default_school_email: str = "info@feemaster.edu"

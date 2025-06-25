@@ -11,6 +11,29 @@ import csv
 import io
 import os
 
+# Sentry Configuration
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.asyncio import AsyncioIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+# Initialize Sentry
+sentry_sdk.init(
+    dsn=settings.sentry_dsn or "",  # Use settings instead of os.getenv
+    environment=settings.environment,
+    integrations=[
+        FastApiIntegration(),
+        AsyncioIntegration(),
+        SqlalchemyIntegration(),
+    ],
+    # Set traces_sample_rate to 1.0 to capture 100% of transactions for performance monitoring.
+    # We recommend adjusting this value in production.
+    traces_sample_rate=1.0,
+    # Set profiles_sample_rate to 1.0 to profile 100% of sampled transactions.
+    # We recommend adjusting this value in production.
+    profiles_sample_rate=1.0,
+)
+
 from app.config import settings
 from app.database import db
 
