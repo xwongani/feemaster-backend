@@ -2748,3 +2748,73 @@
 2025-06-25 02:49:12,393 - app.database - INFO - Database connections initialized successfully
 2025-06-25 02:49:12,393 - app.database - ERROR - Raw query failed: 'NoneType' object has no attribute 'rpc'
 2025-06-25 02:49:12,394 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
+2025-06-25 03:35:06,957 - app.services.notification_service - INFO - Notification service cleaned up
+2025-06-25 03:35:06,963 - app.database - INFO - Database pool closed
+2025-06-25 03:35:06,963 - app.database - INFO - Database connections closed successfully
+2025-06-25 03:35:06,964 - app.main - INFO - Application shutdown completed
+2025-06-25 03:35:10,930 - app.database - INFO - PostgreSQL connection pool initialized
+2025-06-25 03:35:10,930 - app.database - INFO - Database connections initialized successfully
+2025-06-25 03:35:10,930 - app.services.notification_service - INFO - Email client initialized
+2025-06-25 03:35:10,931 - app.services.notification_service - INFO - SMS client initialized
+2025-06-25 03:35:10,931 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-25 03:35:10,931 - app.main - INFO - Application startup completed
+2025-06-25 03:35:10,951 - app.database - INFO - PostgreSQL connection pool initialized
+2025-06-25 03:35:10,952 - app.database - INFO - Database connections initialized successfully
+2025-06-25 03:35:10,952 - app.database - ERROR - Raw query failed: 'NoneType' object has no attribute 'rpc'
+2025-06-25 03:35:10,952 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
+2025-06-25 03:35:16,266 - app.services.notification_service - INFO - Notification service cleaned up
+2025-06-25 03:35:16,283 - app.database - INFO - Database pool closed
+2025-06-25 03:35:16,283 - app.database - INFO - Database connections closed successfully
+2025-06-25 03:35:16,283 - app.main - INFO - Application shutdown completed
+2025-06-25 03:35:19,948 - app.database - INFO - PostgreSQL connection pool initialized
+2025-06-25 03:35:19,948 - app.database - INFO - Database connections initialized successfully
+2025-06-25 03:35:19,948 - app.services.notification_service - INFO - Email client initialized
+2025-06-25 03:35:19,949 - app.services.notification_service - INFO - SMS client initialized
+2025-06-25 03:35:19,949 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-25 03:35:19,949 - app.main - INFO - Application startup completed
+2025-06-25 03:35:19,972 - app.database - INFO - PostgreSQL connection pool initialized
+2025-06-25 03:35:19,973 - app.database - INFO - Database connections initialized successfully
+2025-06-25 03:35:19,973 - app.database - ERROR - Raw query failed: 'NoneType' object has no attribute 'rpc'
+2025-06-25 03:35:19,973 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
+2025-06-25 03:35:28,440 - app.services.notification_service - INFO - Notification service cleaned up
+2025-06-25 03:35:28,447 - app.database - INFO - Database pool closed
+2025-06-25 03:35:28,448 - app.database - INFO - Database connections closed successfully
+2025-06-25 03:35:28,448 - app.main - INFO - Application shutdown completed
+2025-06-25 03:35:30,649 - app.database - INFO - PostgreSQL connection pool initialized
+2025-06-25 03:35:30,649 - app.database - INFO - Database connections initialized successfully
+2025-06-25 03:35:30,650 - app.services.notification_service - INFO - Email client initialized
+2025-06-25 03:35:30,650 - app.services.notification_service - INFO - SMS client initialized
+2025-06-25 03:35:30,650 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-25 03:35:30,650 - app.main - INFO - Application startup completed
+2025-06-25 03:35:30,669 - app.database - INFO - PostgreSQL connection pool initialized
+2025-06-25 03:35:30,670 - app.database - INFO - Database connections initialized successfully
+2025-06-25 03:35:30,670 - app.database - ERROR - Raw query failed: 'NoneType' object has no attribute 'rpc'
+2025-06-25 03:35:30,670 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
+2025-06-25 03:36:29,392 - app.services.notification_service - INFO - Notification service cleaned up
+2025-06-25 03:36:29,403 - app.database - INFO - Database pool closed
+2025-06-25 03:36:29,403 - app.database - INFO - Database connections closed successfully
+2025-06-25 03:36:29,403 - app.main - INFO - Application shutdown completed
+2025-06-25 03:36:31,981 - app.database - INFO - PostgreSQL connection pool initialized
+2025-06-25 03:36:31,982 - app.database - INFO - Database connections initialized successfully
+2025-06-25 03:36:31,982 - app.services.notification_service - INFO - Email client initialized
+2025-06-25 03:36:31,983 - app.services.notification_service - INFO - SMS client initialized
+2025-06-25 03:36:31,984 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-25 03:36:31,984 - app.main - INFO - Application startup completed
+2025-06-25 03:36:32,026 - app.database - INFO - PostgreSQL connection pool initialized
+2025-06-25 03:36:32,027 - app.database - INFO - Database connections initialized successfully
+2025-06-25 03:36:32,027 - app.database - ERROR - Raw query failed: 'NoneType' object has no attribute 'rpc'
+2025-06-25 03:36:32,027 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
+2025-06-25 03:37:11,706 - app.services.notification_service - INFO - Notification service cleaned up
+2025-06-25 03:37:11,709 - app.database - INFO - Database pool closed
+2025-06-25 03:37:11,709 - app.database - INFO - Database connections closed successfully
+2025-06-25 03:37:11,709 - app.main - INFO - Application shutdown completed
+2025-06-25 03:37:13,349 - app.database - INFO - PostgreSQL connection pool initialized
+2025-06-25 03:37:13,349 - app.database - INFO - Database connections initialized successfully
+2025-06-25 03:37:13,349 - app.services.notification_service - INFO - Email client initialized
+2025-06-25 03:37:13,349 - app.services.notification_service - INFO - SMS client initialized
+2025-06-25 03:37:13,349 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-25 03:37:13,349 - app.main - INFO - Application startup completed
+2025-06-25 03:37:13,364 - app.database - INFO - PostgreSQL connection pool initialized
+2025-06-25 03:37:13,364 - app.database - INFO - Database connections initialized successfully
+2025-06-25 03:37:13,364 - app.database - ERROR - Raw query failed: 'NoneType' object has no attribute 'rpc'
+2025-06-25 03:37:13,364 - app.services.notification_service - INFO - Processed overdue fees: {'processed': 0, 'failed': 0, 'skipped': 0}
