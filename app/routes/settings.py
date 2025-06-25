@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, status
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime
 import logging
 
@@ -190,67 +190,6 @@ async def update_notification_settings(
         logger.error(f"Failed to update notification settings: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/users")
-async def get_users(current_user: dict = Depends(get_current_user)):
-    """Get system users"""
-    try:
-        # Verify admin permission
-        if current_user["role"] not in ["admin", "super_admin"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions"
-            )
-        
-        # Mock users data - in production, fetch from database
-        users = [
-            {
-                "id": "1",
-                "first_name": "John",
-                "last_name": "Admin",
-                "email": "admin@feemaster.edu",
-                "role": "admin",
-                "employee_id": "EMP001",
-                "phone": "+260 97 111 1111",
-                "is_active": True,
-                "last_login": "2024-01-15T10:30:00Z",
-                "created_at": "2024-01-01T00:00:00Z"
-            },
-            {
-                "id": "2",
-                "first_name": "Jane",
-                "last_name": "Finance",
-                "email": "finance@feemaster.edu",
-                "role": "finance_manager",
-                "employee_id": "EMP002",
-                "phone": "+260 97 222 2222",
-                "is_active": True,
-                "last_login": "2024-01-15T09:15:00Z",
-                "created_at": "2024-01-01T00:00:00Z"
-            },
-            {
-                "id": "3",
-                "first_name": "Mike",
-                "last_name": "Student Affairs",
-                "email": "student.affairs@feemaster.edu",
-                "role": "teacher",
-                "employee_id": "EMP003",
-                "phone": "+260 97 333 3333",
-                "is_active": True,
-                "last_login": "2024-01-14T16:45:00Z",
-                "created_at": "2024-01-01T00:00:00Z"
-            }
-        ]
-        
-        return APIResponse(
-            success=True,
-            message="Users retrieved successfully",
-            data=users
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to fetch users: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @router.post("/users")
 async def create_user(
     user_data: UserCreate,
@@ -276,6 +215,244 @@ async def create_user(
         
     except Exception as e:
         logger.error(f"Failed to create user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/users", response_model=APIResponse)
+async def get_users(
+    role: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all users with optional filters"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions"
+            )
+        
+        filters = {}
+        if role:
+            filters["role"] = role
+        if is_active is not None:
+            filters["is_active"] = is_active
+        
+        result = await db.execute_query(
+            "users", 
+            "select", 
+            filters=filters,
+            select_fields="id, email, first_name, last_name, role, is_active, is_verified, created_at, last_login",
+            order_by="created_at desc"
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Users retrieved successfully",
+            data=result["data"]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get users: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/users/{user_id}", response_model=APIResponse)
+async def get_user(
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get specific user details"""
+    try:
+        # Verify admin permission or own user
+        if current_user["role"] not in ["admin", "super_admin"] and current_user["id"] != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions"
+            )
+        
+        result = await db.execute_query(
+            "users",
+            "select",
+            filters={"id": user_id},
+            select_fields="id, email, first_name, last_name, role, is_active, is_verified, created_at, last_login"
+        )
+        
+        if not result["success"] or not result["data"]:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return APIResponse(
+            success=True,
+            message="User retrieved successfully",
+            data=result["data"][0]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/users/{user_id}", response_model=APIResponse)
+async def update_user(
+    user_id: str,
+    user_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update user information"""
+    try:
+        # Verify admin permission or own user
+        if current_user["role"] not in ["admin", "super_admin"] and current_user["id"] != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions"
+            )
+        
+        # Remove sensitive fields that shouldn't be updated directly
+        user_data.pop("password_hash", None)
+        user_data.pop("password", None)
+        
+        result = await db.execute_query(
+            "users",
+            "update",
+            data=user_data,
+            filters={"id": user_id}
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="User updated successfully",
+            data=result["data"][0] if result["data"] else None
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/users/{user_id}", response_model=APIResponse)
+async def delete_user(
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete a user (soft delete)"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions"
+            )
+        
+        # Prevent self-deletion
+        if current_user["id"] == user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete your own account"
+            )
+        
+        # Soft delete by deactivating
+        result = await db.execute_query(
+            "users",
+            "update",
+            data={"is_active": False},
+            filters={"id": user_id}
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="User deactivated successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/users/{user_id}/reset-password", response_model=APIResponse)
+async def reset_user_password(
+    user_id: str,
+    new_password: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Reset user password"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions"
+            )
+        
+        from ..auth import get_password_hash
+        hashed_password = get_password_hash(new_password)
+        
+        result = await db.execute_query(
+            "users",
+            "update",
+            data={"password_hash": hashed_password},
+            filters={"id": user_id}
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Password reset successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to reset password: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/users/{user_id}/activate", response_model=APIResponse)
+async def activate_user(
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Activate a deactivated user"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions"
+            )
+        
+        result = await db.execute_query(
+            "users",
+            "update",
+            data={"is_active": True},
+            filters={"id": user_id}
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="User activated successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to activate user: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/backup")

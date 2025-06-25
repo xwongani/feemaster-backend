@@ -11,11 +11,15 @@ import csv
 import io
 import os
 
+# Import settings first
+from app.config import settings
+
 # Sentry Configuration
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+from app.config import settings
 
 # Initialize Sentry
 sentry_sdk.init(
@@ -38,10 +42,8 @@ sentry_sdk.init(
     enable_tracing=True,
 )
 
-from app.config import settings
 from app.database import db
 
-# Import all route modules
 from app.routes import auth, students, payments, dashboard, reports, integrations, settings as settings_routes, financial, parents, quickbooks, errors, parent_portal, test_sentry
 
 # Import models

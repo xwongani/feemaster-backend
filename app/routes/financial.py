@@ -343,15 +343,20 @@ async def export_financial_data(
         if not result["success"]:
             raise HTTPException(status_code=500, detail="Failed to export financial data")
         
+        # Convert result to CSV
+        import csv
+        import io
+        output = io.StringIO()
+        csv_writer = csv.writer(output)
+        csv_writer.writerow(["Receipt Number", "Payment Date", "Student Name", "Student ID", "Grade", "Amount", "Payment Method", "Payment Status", "Payment Type", "Notes"])
+        for row in result["data"]:
+            csv_writer.writerow([row["receipt_number"], row["payment_date"], row["student_name"], row["student_id"], row["grade"], row["amount"], row["payment_method"], row["payment_status"], row["payment_type"], row["notes"]])
+        csv_data = output.getvalue()
+        
         return APIResponse(
             success=True,
-            message="Financial data export generated successfully",
-            data={
-                "records": result["data"],
-                "total_records": len(result["data"]),
-                "export_format": format,
-                "generated_at": datetime.utcnow().isoformat()
-            }
+            message="Financial data exported successfully",
+            data={"download_url": "data:application/csv;base64," + csv_data}
         )
         
     except Exception as e:
@@ -359,15 +364,568 @@ async def export_financial_data(
         raise HTTPException(status_code=500, detail=str(e))
 
 def _get_date_filter_for_period(period: str, start_date: Optional[date] = None, end_date: Optional[date] = None) -> str:
-    """Helper function to get date filter based on period"""
-    if period == "custom" and start_date and end_date:
+    """Generate date filter based on period"""
+    if start_date and end_date:
         return f"AND payment_date BETWEEN '{start_date}' AND '{end_date}'"
-    elif period == "current-term":
-        # Assuming current term is 4 months
-        return "AND payment_date >= CURRENT_DATE - INTERVAL '4 months'"
-    elif period == "previous-term":
-        return "AND payment_date >= CURRENT_DATE - INTERVAL '8 months' AND payment_date < CURRENT_DATE - INTERVAL '4 months'"
+    elif start_date:
+        return f"AND payment_date >= '{start_date}'"
+    elif end_date:
+        return f"AND payment_date <= '{end_date}'"
+    
+    if period == "current-term":
+        return "AND payment_date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '3 months')"
     elif period == "current-year":
-        return "AND EXTRACT(YEAR FROM payment_date) = EXTRACT(YEAR FROM CURRENT_DATE)"
+        return "AND payment_date >= DATE_TRUNC('year', CURRENT_DATE)"
+    elif period == "last-month":
+        return "AND payment_date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')"
+    elif period == "last-3-months":
+        return "AND payment_date >= CURRENT_DATE - INTERVAL '3 months'"
+    elif period == "last-6-months":
+        return "AND payment_date >= CURRENT_DATE - INTERVAL '6 months'"
     else:
-        return "" 
+        return ""
+
+# Fee Types CRUD Operations
+@router.post("/fee-types", response_model=APIResponse)
+async def create_fee_type(
+    fee_type_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new fee type"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin"]:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        result = await db.execute_query("fee_types", "insert", data=fee_type_data)
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Fee type created successfully",
+            data=result["data"][0] if result["data"] else None
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create fee type: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/fee-types", response_model=APIResponse)
+async def get_fee_types(
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all fee types"""
+    try:
+        result = await db.execute_query("fee_types", "select", select_fields="*", order_by="name asc")
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Fee types retrieved successfully",
+            data=result["data"]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get fee types: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/fee-types/{fee_type_id}", response_model=APIResponse)
+async def update_fee_type(
+    fee_type_id: str,
+    fee_type_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update a fee type"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin"]:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        result = await db.execute_query(
+            "fee_types", 
+            "update", 
+            data=fee_type_data,
+            filters={"id": fee_type_id}
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Fee type updated successfully",
+            data=result["data"][0] if result["data"] else None
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update fee type: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/fee-types/{fee_type_id}", response_model=APIResponse)
+async def delete_fee_type(
+    fee_type_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete a fee type"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin"]:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        # Check if fee type is being used
+        usage_check = await db.execute_query(
+            "student_fees",
+            "select",
+            filters={"fee_type_id": fee_type_id},
+            select_fields="id"
+        )
+        
+        if usage_check["success"] and usage_check["data"]:
+            raise HTTPException(
+                status_code=400, 
+                detail="Cannot delete fee type that is being used by student fees"
+            )
+        
+        result = await db.execute_query("fee_types", "delete", filters={"id": fee_type_id})
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Fee type deleted successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete fee type: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Academic Years CRUD Operations
+@router.post("/academic-years", response_model=APIResponse)
+async def create_academic_year(
+    academic_year_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new academic year"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin"]:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        result = await db.execute_query("academic_years", "insert", data=academic_year_data)
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Academic year created successfully",
+            data=result["data"][0] if result["data"] else None
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create academic year: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/academic-years", response_model=APIResponse)
+async def get_academic_years(
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all academic years"""
+    try:
+        result = await db.execute_query("academic_years", "select", select_fields="*", order_by="year_name desc")
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Academic years retrieved successfully",
+            data=result["data"]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get academic years: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/academic-years/{academic_year_id}", response_model=APIResponse)
+async def update_academic_year(
+    academic_year_id: str,
+    academic_year_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update an academic year"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin"]:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        result = await db.execute_query(
+            "academic_years", 
+            "update", 
+            data=academic_year_data,
+            filters={"id": academic_year_id}
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Academic year updated successfully",
+            data=result["data"][0] if result["data"] else None
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update academic year: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/academic-years/{academic_year_id}", response_model=APIResponse)
+async def delete_academic_year(
+    academic_year_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete an academic year"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin"]:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        # Check if academic year is being used
+        usage_check = await db.execute_query(
+            "student_fees",
+            "select",
+            filters={"academic_year_id": academic_year_id},
+            select_fields="id"
+        )
+        
+        if usage_check["success"] and usage_check["data"]:
+            raise HTTPException(
+                status_code=400, 
+                detail="Cannot delete academic year that is being used by student fees"
+            )
+        
+        result = await db.execute_query("academic_years", "delete", filters={"id": academic_year_id})
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Academic year deleted successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete academic year: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Academic Terms CRUD Operations
+@router.post("/academic-terms", response_model=APIResponse)
+async def create_academic_term(
+    academic_term_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new academic term"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin"]:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        result = await db.execute_query("academic_terms", "insert", data=academic_term_data)
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Academic term created successfully",
+            data=result["data"][0] if result["data"] else None
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create academic term: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/academic-terms", response_model=APIResponse)
+async def get_academic_terms(
+    academic_year_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all academic terms"""
+    try:
+        filters = {}
+        if academic_year_id:
+            filters["academic_year_id"] = academic_year_id
+        
+        result = await db.execute_query(
+            "academic_terms", 
+            "select", 
+            filters=filters,
+            select_fields="*", 
+            order_by="term_number asc"
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Academic terms retrieved successfully",
+            data=result["data"]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get academic terms: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/academic-terms/{academic_term_id}", response_model=APIResponse)
+async def update_academic_term(
+    academic_term_id: str,
+    academic_term_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update an academic term"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin"]:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        result = await db.execute_query(
+            "academic_terms", 
+            "update", 
+            data=academic_term_data,
+            filters={"id": academic_term_id}
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Academic term updated successfully",
+            data=result["data"][0] if result["data"] else None
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update academic term: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/academic-terms/{academic_term_id}", response_model=APIResponse)
+async def delete_academic_term(
+    academic_term_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete an academic term"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin"]:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        # Check if academic term is being used
+        usage_check = await db.execute_query(
+            "student_fees",
+            "select",
+            filters={"academic_term_id": academic_term_id},
+            select_fields="id"
+        )
+        
+        if usage_check["success"] and usage_check["data"]:
+            raise HTTPException(
+                status_code=400, 
+                detail="Cannot delete academic term that is being used by student fees"
+            )
+        
+        result = await db.execute_query("academic_terms", "delete", filters={"id": academic_term_id})
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Academic term deleted successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete academic term: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Student Fees CRUD Operations
+@router.post("/student-fees", response_model=APIResponse)
+async def create_student_fee(
+    student_fee_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new student fee"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin", "cashier"]:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        
+        result = await db.execute_query("student_fees", "insert", data=student_fee_data)
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Student fee created successfully",
+            data=result["data"][0] if result["data"] else None
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create student fee: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/student-fees", response_model=APIResponse)
+async def get_student_fees(
+    student_id: Optional[str] = None,
+    academic_year_id: Optional[str] = None,
+    academic_term_id: Optional[str] = None,
+    is_paid: Optional[bool] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get student fees with filters"""
+    try:
+        filters = {}
+        if student_id:
+            filters["student_id"] = student_id
+        if academic_year_id:
+            filters["academic_year_id"] = academic_year_id
+        if academic_term_id:
+            filters["academic_term_id"] = academic_term_id
+        if is_paid is not None:
+            filters["is_paid"] = is_paid
+        
+        result = await db.execute_query(
+            "student_fees", 
+            "select", 
+            filters=filters,
+            select_fields="""
+                *,
+                students(student_id, first_name, last_name, grade),
+                fee_types(name, fee_type, description),
+                academic_years(year_name),
+                academic_terms(term_name)
+            """,
+            order_by="due_date asc"
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Student fees retrieved successfully",
+            data=result["data"]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get student fees: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/student-fees/{student_fee_id}", response_model=APIResponse)
+async def update_student_fee(
+    student_fee_id: str,
+    student_fee_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update a student fee"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin", "cashier"]:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        
+        result = await db.execute_query(
+            "student_fees", 
+            "update", 
+            data=student_fee_data,
+            filters={"id": student_fee_id}
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Student fee updated successfully",
+            data=result["data"][0] if result["data"] else None
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update student fee: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/student-fees/{student_fee_id}", response_model=APIResponse)
+async def delete_student_fee(
+    student_fee_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete a student fee"""
+    try:
+        # Verify admin permission
+        if current_user["role"] not in ["admin", "super_admin"]:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        # Check if fee has payments
+        payment_check = await db.execute_query(
+            "payment_allocations",
+            "select",
+            filters={"student_fee_id": student_fee_id},
+            select_fields="id"
+        )
+        
+        if payment_check["success"] and payment_check["data"]:
+            raise HTTPException(
+                status_code=400, 
+                detail="Cannot delete student fee that has payments"
+            )
+        
+        result = await db.execute_query("student_fees", "delete", filters={"id": student_fee_id})
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return APIResponse(
+            success=True,
+            message="Student fee deleted successfully"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete student fee: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) 
