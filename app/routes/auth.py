@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 from datetime import datetime, timedelta
 import jwt
 import bcrypt
 import logging
+import secrets
 
 from ..models import UserLogin, UserCreate, Token, User, APIResponse
 from ..database import db
@@ -283,4 +284,61 @@ async def refresh_token(current_user: dict = Depends(get_current_user)):
         "token_type": "bearer",
         "expires_in": settings.access_token_expire_minutes * 60,
         "user": current_user
-    } 
+    }
+
+@router.post("/forgot-password", response_model=APIResponse)
+async def forgot_password(request: Request):
+    data = await request.json()
+    email = data.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    # Find user
+    result = await db.execute_query("users", "select", filters={"email": email}, select_fields="id,email,first_name")
+    if not result["success"] or not result["data"]:
+        # Always return success for security
+        return {"success": True, "message": "If an account with that email exists, a reset link has been sent."}
+    user = result["data"][0]
+    # Generate token
+    token = secrets.token_urlsafe(32)
+    expires_at = (datetime.utcnow() + timedelta(hours=1)).isoformat()
+    # Store token in password_resets table
+    await db.execute_query(
+        "password_resets", "insert",
+        data={"user_id": user["id"], "token": token, "expires_at": expires_at}
+    )
+    # Compose reset link
+    reset_link = f"{settings.react_app_supabase_url or 'https://feemaster.onrender.com'}/reset-password?token={token}"
+    # Call your email API (assuming /api/v1/notifications/email)
+    await db.execute_query(
+        "notifications", "send_email",
+        data={
+            "to": user["email"],
+            "subject": "Password Reset Request",
+            "body": f"Hi {user['first_name']},\n\nClick the link below to reset your password:\n{reset_link}\n\nIf you did not request this, ignore this email."
+        }
+    )
+    logger.info(f"Password reset link for {email}: {reset_link}")
+    return {"success": True, "message": "If an account with that email exists, a reset link has been sent."}
+
+@router.post("/reset-password", response_model=APIResponse)
+async def reset_password(request: Request):
+    data = await request.json()
+    token = data.get("token")
+    new_password = data.get("password")
+    if not token or not new_password:
+        raise HTTPException(status_code=400, detail="Token and new password are required")
+    # Find token in password_resets
+    result = await db.execute_query("password_resets", "select", filters={"token": token}, select_fields="user_id,expires_at,used")
+    if not result["success"] or not result["data"]:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    reset = result["data"][0]
+    if reset.get("used"):
+        raise HTTPException(status_code=400, detail="Token already used")
+    if datetime.utcnow() > datetime.fromisoformat(reset["expires_at"]):
+        raise HTTPException(status_code=400, detail="Token expired")
+    # Update user password
+    password_hash = get_password_hash(new_password)
+    await db.execute_query("users", "update", filters={"id": reset["user_id"]}, data={"password_hash": password_hash})
+    # Mark token as used
+    await db.execute_query("password_resets", "update", filters={"token": token}, data={"used": True})
+    return {"success": True, "message": "Password has been reset successfully."} 
