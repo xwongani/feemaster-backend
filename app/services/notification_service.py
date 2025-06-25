@@ -23,6 +23,7 @@ except ImportError:
 
 from ..config import settings
 from ..models import NotificationCreate, NotificationChannel
+from ..database import db
 
 logger = logging.getLogger(__name__)
 
