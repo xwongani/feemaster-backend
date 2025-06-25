@@ -19,7 +19,7 @@ from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
 # Initialize Sentry
 sentry_sdk.init(
-    dsn=settings.sentry_dsn or "",  # Use settings instead of os.getenv
+    dsn=settings.sentry_dsn or "https://c5e51e9a2465263c987fe4bed6ab42d9@o4509560859721728.ingest.us.sentry.io/4509560886198272",
     environment=settings.environment,
     integrations=[
         FastApiIntegration(),
@@ -32,14 +32,17 @@ sentry_sdk.init(
     # Set profiles_sample_rate to 1.0 to profile 100% of sampled transactions.
     # We recommend adjusting this value in production.
     profiles_sample_rate=1.0,
+    # Enable default PII data collection
+    send_default_pii=True,
+    # Enable logging
+    enable_tracing=True,
 )
 
 from app.config import settings
 from app.database import db
 
 # Import all route modules
-from app.routes import auth, students, payments, dashboard, reports, integrations, settings as settings_routes, financial, parents, quickbooks, errors
-from app.routes import parent_portal
+from app.routes import auth, students, payments, dashboard, reports, integrations, settings as settings_routes, financial, parents, quickbooks, errors, parent_portal, test_sentry
 
 # Import models
 from app.models import (
@@ -102,6 +105,7 @@ app.include_router(parents.router, prefix="/api/v1")
 app.include_router(quickbooks.router, prefix="/api/v1")
 app.include_router(errors.router, prefix="/api/v1")
 app.include_router(parent_portal.router, prefix="/api/v1")
+app.include_router(test_sentry.router, prefix="/api/v1")
 
 # Authentication dependency
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
