@@ -21,7 +21,7 @@ sentry-sdk[fastapi]==1.38.0
 twilio>=8.0.0
 
 # External Integrations
-intuitlib>=1.2.0
+intuit-oauth>=1.2.0
 quickbooks-python>=0.8.0
 stripe>=7.0.0
 paypal-python-sdk>=1.13.0
