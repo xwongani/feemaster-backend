@@ -65,6 +65,40 @@ class Database:
             logger.error(f"Database connection failed: {e}")
             raise
 
+    async def initialize(self):
+        """Initialize database connections (alias for connect)"""
+        await self.connect()
+
+    async def check_connection(self) -> Dict[str, Any]:
+        """Check database connection status"""
+        try:
+            if self.pool:
+                async with self.get_connection() as conn:
+                    await conn.fetchval("SELECT 1")
+                return {"status": "connected", "type": "postgresql"}
+            elif self.supabase_client:
+                # Simple test query for Supabase
+                result = self.supabase_client.table("schools").select("id").limit(1).execute()
+                return {"status": "connected", "type": "supabase"}
+            else:
+                return {"status": "disconnected", "type": "none"}
+        except Exception as e:
+            logger.error(f"Database connection check failed: {e}")
+            return {"status": "error", "type": "unknown", "error": str(e)}
+
+    async def close(self):
+        """Close database connections"""
+        try:
+            if self.pool:
+                await self.pool.close()
+                logger.info("PostgreSQL connection pool closed")
+            if self.supabase_client:
+                # Supabase client doesn't need explicit closing
+                self.supabase_client = None
+                logger.info("Supabase connection closed")
+        except Exception as e:
+            logger.error(f"Error closing database connections: {e}")
+
     async def _monitor_connections(self):
         """Monitor database connections"""
         while True:
