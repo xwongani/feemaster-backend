@@ -150,4 +150,6 @@ class TwilioService:
             return {
                 "success": False,
                 "error": str(e)
-            } 
+            }
+
+twilio_service = TwilioService() 

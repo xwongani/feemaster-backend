@@ -3236,3 +3236,41 @@
 2025-06-25 23:45:45,389 - app.database - INFO - Database pool closed
 2025-06-25 23:45:45,390 - app.database - INFO - Database connections closed successfully
 2025-06-25 23:45:45,392 - app.main - INFO - Application shutdown completed
+2025-06-30 12:44:55,450 - app.main - INFO - Starting Fee Master Backend...
+2025-06-30 12:44:55,494 - app.database - INFO - PostgreSQL connection pool initialized
+2025-06-30 12:44:55,495 - app.database - INFO - Database connections initialized successfully
+2025-06-30 12:44:55,495 - app.main - INFO - Database initialized
+2025-06-30 12:44:55,495 - app.main - ERROR - Failed to start application: name 'cache_service' is not defined
+2025-06-30 12:48:28,805 - app.main - INFO - Starting Fee Master Backend...
+2025-06-30 12:48:28,817 - app.database - INFO - PostgreSQL connection pool initialized
+2025-06-30 12:48:28,818 - app.database - INFO - Database connections initialized successfully
+2025-06-30 12:48:28,818 - app.main - INFO - Database initialized
+2025-06-30 12:48:28,818 - app.services.analytics_service - INFO - Analytics service initialized successfully
+2025-06-30 12:48:28,818 - app.main - INFO - AnalyticsService initialized
+2025-06-30 12:48:28,818 - app.main - INFO - CacheService initialized
+2025-06-30 12:48:28,819 - app.main - ERROR - Failed to initialize IntegrationService: 'IntegrationService' object has no attribute 'initialize'
+2025-06-30 12:48:29,042 - app.services.notification_service - INFO - Email client initialized
+2025-06-30 12:48:29,043 - app.services.notification_service - INFO - SMS client initialized
+2025-06-30 12:48:29,043 - app.services.notification_service - INFO - Notification service initialized successfully
+2025-06-30 12:48:29,043 - app.main - INFO - NotificationService initialized
+2025-06-30 12:48:29,077 - app.services.quickbooks_service - ERROR - QuickBooks dependencies not installed: cannot import name 'QuickbooksManager' from 'quickbooks.objects.base' (/home/tulongam/Documents/feemaster/feemaster-backend/.venv/lib/python3.8/site-packages/quickbooks/objects/base.py)
+2025-06-30 12:48:29,080 - app.services.quickbooks_service - INFO - Install with: pip install intuitlib quickbooks-python
+2025-06-30 12:48:29,081 - app.main - INFO - QuickBooksService initialized
+2025-06-30 12:48:29,081 - app.services.receipt_service - INFO - Receipt service initialized successfully
+2025-06-30 12:48:29,081 - app.main - INFO - ReceiptService initialized
+2025-06-30 12:48:29,081 - app.main - ERROR - Failed to initialize TwilioService: 'TwilioService' object has no attribute 'initialize'
+2025-06-30 12:48:29,084 - app.services.payment_gateway_service - INFO - Payment gateway service initialized successfully
+2025-06-30 12:48:29,084 - app.main - INFO - PaymentGatewayService initialized
+2025-06-30 12:48:29,084 - app.services.whatsapp_service - WARNING - WhatsApp API credentials not configured
+2025-06-30 12:48:29,085 - app.main - INFO - WhatsAppService initialized
+2025-06-30 12:48:29,085 - app.services.websocket_service - INFO - WebSocket service initialized successfully
+2025-06-30 12:48:29,085 - app.main - INFO - WebSocketService initialized
+2025-06-30 12:48:29,085 - app.services.audit_service - INFO - Audit service initialized successfully
+2025-06-30 12:48:29,085 - app.main - INFO - AuditService initialized
+2025-06-30 12:48:29,085 - app.services.bulk_operations_service - INFO - Bulk operations service initialized successfully
+2025-06-30 12:48:29,085 - app.main - INFO - BulkOperationsService initialized
+2025-06-30 12:48:29,085 - app.main - INFO - Fee Master Backend started successfully
+2025-06-30 12:49:10,297 - app.main - INFO - Shutting down Fee Master Backend...
+2025-06-30 12:49:10,297 - app.services.whatsapp_service - INFO - WhatsApp service cleaned up
+2025-06-30 12:49:10,301 - app.database - INFO - PostgreSQL connection pool closed
+2025-06-30 12:49:10,301 - app.main - INFO - Fee Master Backend shutdown complete

@@ -63,6 +63,15 @@ from app.models import (
 from app.services.notification_service import notification_service
 from app.services.receipt_service import receipt_service
 from app.services.analytics_service import analytics_service
+from app.services.cache_service import cache_service
+from app.services.integration_service import integration_service
+from app.services.quickbooks_service import quickbooks_service
+from app.services.twilio_service import twilio_service
+from app.services.payment_gateway_service import payment_gateway_service
+from app.services.whatsapp_service import whatsapp_service
+from app.services.websocket_service import websocket_service
+from app.services.audit_service import audit_service
+from app.services.bulk_operations_service import bulk_operations_service
 
 # Configure logging
 logging.basicConfig(

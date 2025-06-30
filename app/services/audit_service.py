@@ -122,7 +122,7 @@ class AuditService:
         export_details = {
             "export_type": export_type,
             "record_count": record_count,
-            **details or {}
+            **(details or {})
         }
         
         return await self.log_activity(
@@ -137,7 +137,7 @@ class AuditService:
         bulk_details = {
             "operation_type": operation_type,
             "record_count": record_count,
-            **details or {}
+            **(details or {})
         }
         
         return await self.log_activity(
