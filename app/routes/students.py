@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Query, status, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, Query, status, UploadFile, File, Body
 from typing import List, Optional
 import uuid
 import csv
@@ -574,4 +574,60 @@ async def get_students_overview(
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/student-lookup", response_model=APIResponse)
+async def student_lookup(
+    payload: dict = Body(..., example={
+        "student_id": "STU12345",
+        "parent_phone": "0712345678",
+        "parent_id": "parent-uuid"
+    })
+):
+    """Advanced student lookup by student_id, parent_phone, or parent_id."""
+    try:
+        student_id = payload.get("student_id")
+        parent_phone = payload.get("parent_phone")
+        parent_id = payload.get("parent_id")
+        
+        if not (student_id or parent_phone or parent_id):
+            return APIResponse(success=False, message="Provide at least one of student_id, parent_phone, or parent_id.", data=None)
+        
+        # Build query
+        if student_id:
+            result = await db.execute_query(
+                "students",
+                "select",
+                filters={"student_id": student_id},
+                select_fields="*"
+            )
+            students = result["data"] if result["success"] else []
+        elif parent_id:
+            # Find all students linked to this parent
+            query = """
+                SELECT s.* FROM students s
+                JOIN parent_student_links psl ON s.id = psl.student_id
+                WHERE psl.parent_id = $1
+            """
+            result = await db.execute_raw_query(query, [parent_id])
+            students = result["data"] if result["success"] else []
+        elif parent_phone:
+            # Find all students linked to this parent phone
+            query = """
+                SELECT s.* FROM students s
+                JOIN parent_student_links psl ON s.id = psl.student_id
+                JOIN parents p ON psl.parent_id = p.id
+                WHERE p.phone = $1
+            """
+            result = await db.execute_raw_query(query, [parent_phone])
+            students = result["data"] if result["success"] else []
+        else:
+            students = []
+        
+        return APIResponse(
+            success=True,
+            message="Student(s) found" if students else "No students found",
+            data=students
+        )
+    except Exception as e:
+        return APIResponse(success=False, message=str(e), data=None) 

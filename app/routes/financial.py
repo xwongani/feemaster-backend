@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
 from typing import Optional
 from datetime import datetime, date, timedelta
 import logging
+import csv
+from io import StringIO
 
 from ..models import APIResponse
 from ..database import db
@@ -344,9 +346,7 @@ async def export_financial_data(
             raise HTTPException(status_code=500, detail="Failed to export financial data")
         
         # Convert result to CSV
-        import csv
-        import io
-        output = io.StringIO()
+        output = StringIO()
         csv_writer = csv.writer(output)
         csv_writer.writerow(["Receipt Number", "Payment Date", "Student Name", "Student ID", "Grade", "Amount", "Payment Method", "Payment Status", "Payment Type", "Notes"])
         for row in result["data"]:
@@ -928,4 +928,105 @@ async def delete_student_fee(
         raise
     except Exception as e:
         logger.error(f"Failed to delete student fee: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/student-fees/bulk-import", response_model=APIResponse)
+async def bulk_import_student_fees(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Bulk import student fees from CSV file"""
+    try:
+        if not file.filename.endswith('.csv'):
+            raise HTTPException(status_code=400, detail="File must be CSV format")
+        content = await file.read()
+        csv_content = content.decode('utf-8')
+        csv_reader = csv.DictReader(StringIO(csv_content))
+        successful_imports = 0
+        failed_imports = 0
+        errors = []
+        for row_num, row in enumerate(csv_reader, start=2):
+            try:
+                fee_data = {
+                    "student_id": row.get("student_id", "").strip(),
+                    "fee_type_id": row.get("fee_type_id", "").strip(),
+                    "amount": row.get("amount", "").strip(),
+                    "due_date": row.get("due_date", "").strip()
+                }
+                if not all([fee_data["student_id"], fee_data["fee_type_id"], fee_data["amount"], fee_data["due_date"]]):
+                    errors.append(f"Row {row_num}: Missing required fields")
+                    failed_imports += 1
+                    continue
+                result = await db.execute_query("student_fees", "insert", data=fee_data)
+                if result["success"]:
+                    successful_imports += 1
+                else:
+                    errors.append(f"Row {row_num}: {result['error']}")
+                    failed_imports += 1
+            except Exception as e:
+                errors.append(f"Row {row_num}: {str(e)}")
+                failed_imports += 1
+        return APIResponse(
+            success=True,
+            message=f"Import completed: {successful_imports} successful, {failed_imports} failed",
+            data={
+                "successful_imports": successful_imports,
+                "failed_imports": failed_imports,
+                "errors": errors
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/payments/bulk-import", response_model=APIResponse)
+async def bulk_import_payments(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Bulk import payments from CSV file"""
+    try:
+        if not file.filename.endswith('.csv'):
+            raise HTTPException(status_code=400, detail="File must be CSV format")
+        content = await file.read()
+        csv_content = content.decode('utf-8')
+        csv_reader = csv.DictReader(StringIO(csv_content))
+        successful_imports = 0
+        failed_imports = 0
+        errors = []
+        for row_num, row in enumerate(csv_reader, start=2):
+            try:
+                payment_data = {
+                    "student_id": row.get("student_id", "").strip(),
+                    "amount": row.get("amount", "").strip(),
+                    "payment_method": row.get("payment_method", "").strip(),
+                    "payment_date": row.get("payment_date", "").strip(),
+                    "receipt_number": row.get("receipt_number", "").strip()
+                }
+                if not all([payment_data["student_id"], payment_data["amount"], payment_data["payment_method"], payment_data["payment_date"], payment_data["receipt_number"]]):
+                    errors.append(f"Row {row_num}: Missing required fields")
+                    failed_imports += 1
+                    continue
+                result = await db.execute_query("payments", "insert", data=payment_data)
+                if result["success"]:
+                    successful_imports += 1
+                else:
+                    errors.append(f"Row {row_num}: {result['error']}")
+                    failed_imports += 1
+            except Exception as e:
+                errors.append(f"Row {row_num}: {str(e)}")
+                failed_imports += 1
+        return APIResponse(
+            success=True,
+            message=f"Import completed: {successful_imports} successful, {failed_imports} failed",
+            data={
+                "successful_imports": successful_imports,
+                "failed_imports": failed_imports,
+                "errors": errors
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
