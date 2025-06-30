@@ -439,8 +439,7 @@ async def get_student_payments(
 
 @router.post("/bulk-import", response_model=APIResponse)
 async def bulk_import_students(
-    file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
+    file: UploadFile = File(...)
 ):
     """Bulk import students from CSV file"""
     try:
@@ -461,6 +460,7 @@ async def bulk_import_students(
                 student_data = {
                     "student_id": row.get("student_id", "").strip(),
                     "first_name": row.get("first_name", "").strip(),
+                    "middle_name": row.get("middle_name", "").strip() or None,
                     "last_name": row.get("last_name", "").strip(),
                     "date_of_birth": row.get("date_of_birth", "").strip(),
                     "gender": row.get("gender", "").strip().lower(),
@@ -471,9 +471,7 @@ async def bulk_import_students(
                 
                 # Validate required fields
                 if not all([student_data["student_id"], student_data["first_name"], 
-                           student_data["last_name"], student_data["date_of_birth"],
-                           student_data["gender"], student_data["grade"], 
-                           student_data["admission_date"]]):
+                           student_data["last_name"], student_data["grade"]]):
                     errors.append(f"Row {row_num}: Missing required fields")
                     failed_imports += 1
                     continue
@@ -503,18 +501,6 @@ async def bulk_import_students(
             except Exception as e:
                 errors.append(f"Row {row_num}: {str(e)}")
                 failed_imports += 1
-        
-        # Log bulk import
-        await analytics_service.log_activity(
-            "students_bulk_import",
-            f"Bulk import completed: {successful_imports} successful, {failed_imports} failed",
-            current_user["id"],
-            {
-                "successful": successful_imports,
-                "failed": failed_imports,
-                "errors": errors
-            }
-        )
         
         return APIResponse(
             success=True,

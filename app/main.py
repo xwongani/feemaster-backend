@@ -230,6 +230,21 @@ async def api_info():
         "debug": settings.debug
     }
 
+# Include routers
+app.include_router(auth.router, prefix="/auth", tags=["authentication"])
+app.include_router(students.router, prefix="/students", tags=["students"])
+app.include_router(payments.router, prefix="/payments", tags=["payments"])
+app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
+app.include_router(reports.router, prefix="/reports", tags=["reports"])
+app.include_router(integrations.router, prefix="/integrations", tags=["integrations"])
+app.include_router(settings_routes.router, prefix="/settings", tags=["settings"])
+app.include_router(financial.router, prefix="/financial", tags=["financial"])
+app.include_router(parents.router, prefix="/parents", tags=["parents"])
+app.include_router(quickbooks.router, prefix="/quickbooks", tags=["quickbooks"])
+app.include_router(errors.router, prefix="/errors", tags=["errors"])
+app.include_router(parent_portal.router, prefix="/parent-portal", tags=["parent-portal"])
+app.include_router(test_sentry.router, prefix="/test-sentry", tags=["test-sentry"])
+
 # Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
