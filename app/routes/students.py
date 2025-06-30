@@ -19,8 +19,8 @@ async def get_students(
     per_page: int = Query(10, ge=1, le=100),
     search: Optional[str] = Query(None),
     grade: Optional[str] = Query(None),
-    status: Optional[str] = Query(None)
-    # current_user: dict = Depends(get_current_user)  # Temporarily disabled for development
+    status: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user)
 ):
     """Get paginated list of students with search and filters"""
     try:
@@ -123,8 +123,8 @@ async def get_students(
 
 @router.get("/{student_id}", response_model=APIResponse)
 async def get_student(
-    student_id: str
-    # current_user: dict = Depends(get_current_user)  # Temporarily disabled
+    student_id: str,
+    current_user: dict = Depends(get_current_user)
 ):
     """Get student by ID with complete profile information"""
     try:
@@ -582,7 +582,8 @@ async def student_lookup(
         "student_id": "STU12345",
         "parent_phone": "0712345678",
         "parent_id": "parent-uuid"
-    })
+    }),
+    current_user: dict = Depends(get_current_user)
 ):
     """Advanced student lookup by student_id, parent_phone, or parent_id."""
     try:

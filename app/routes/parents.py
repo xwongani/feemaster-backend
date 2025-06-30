@@ -1,14 +1,21 @@
-from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Header
 from typing import List, Optional
 from datetime import datetime
 import csv
 from io import StringIO
+import os
 
 from ..models import Parent, ParentCreate, ParentUpdate, APIResponse
 from ..database import db
 from ..auth import get_current_user
 
 router = APIRouter(prefix="/parents", tags=["parents"])
+
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "your-very-secret-key")
+
+async def verify_admin_api_key(x_api_key: str = Header(...)):
+    if x_api_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 @router.post("", response_model=APIResponse)
 async def create_parent(parent: ParentCreate, current_user: dict = Depends(get_current_user)):
@@ -241,6 +248,7 @@ async def delete_parent(parent_id: str, current_user: dict = Depends(get_current
 @router.post("/bulk-import", response_model=APIResponse)
 async def bulk_import_parents(
     file: UploadFile = File(...),
+    admin_auth: None = Depends(verify_admin_api_key),
     current_user: dict = Depends(get_current_user)
 ):
     """Bulk import parents from CSV file"""

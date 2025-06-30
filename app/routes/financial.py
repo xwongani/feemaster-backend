@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, Header
 from typing import Optional
 from datetime import datetime, date, timedelta
 import logging
 import csv
 from io import StringIO
+import os
 
 from ..models import APIResponse
 from ..database import db
@@ -11,6 +12,8 @@ from .auth import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/financial", tags=["financial"])
+
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "your-very-secret-key")
 
 @router.get("/dashboard/overview")
 async def get_financial_overview(
@@ -930,9 +933,14 @@ async def delete_student_fee(
         logger.error(f"Failed to delete student fee: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+async def verify_admin_api_key(x_api_key: str = Header(...)):
+    if x_api_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
 @router.post("/student-fees/bulk-import", response_model=APIResponse)
 async def bulk_import_student_fees(
     file: UploadFile = File(...),
+    admin_auth: None = Depends(verify_admin_api_key),
     current_user: dict = Depends(get_current_user)
 ):
     """Bulk import student fees from CSV file"""
@@ -983,6 +991,7 @@ async def bulk_import_student_fees(
 @router.post("/payments/bulk-import", response_model=APIResponse)
 async def bulk_import_payments(
     file: UploadFile = File(...),
+    admin_auth: None = Depends(verify_admin_api_key),
     current_user: dict = Depends(get_current_user)
 ):
     """Bulk import payments from CSV file"""
