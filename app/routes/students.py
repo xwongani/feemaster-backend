@@ -568,8 +568,7 @@ async def student_lookup(
         "student_id": "STU12345",
         "parent_phone": "0712345678",
         "parent_id": "parent-uuid"
-    }),
-    current_user: dict = Depends(get_current_user)
+    })
 ):
     """Advanced student lookup by student_id, parent_phone, or parent_id."""
     try:
