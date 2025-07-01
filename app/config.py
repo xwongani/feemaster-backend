@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     database_max_overflow: int = 20
     
     # CORS Settings
-    cors_origins: str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,https://feemaster.onrender.com,https://feemaster-admin-frontend.onrender.com")
+    cors_origins: str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001,https://feemaster.onrender.com,https://feemaster-admin-frontend.onrender.com,https://master-fees.com")
     
     # Email Settings
     smtp_host: Optional[str] = None
