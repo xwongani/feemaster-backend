@@ -566,18 +566,20 @@ async def get_students_overview(
 async def student_lookup(
     payload: dict = Body(..., example={
         "student_id": "STU12345",
-        "parent_phone": "0712345678",
+        "phone": "0712345678",
+        "email": "parent@email.com",
         "parent_id": "parent-uuid"
     })
 ):
-    """Advanced student lookup by student_id, parent_phone, or parent_id."""
+    """Advanced student lookup by student_id, phone, email, or parent_id."""
     try:
         student_id = payload.get("student_id")
-        parent_phone = payload.get("parent_phone")
+        phone = payload.get("phone")
+        email = payload.get("email")
         parent_id = payload.get("parent_id")
         
-        if not (student_id or parent_phone or parent_id):
-            return APIResponse(success=False, message="Provide at least one of student_id, parent_phone, or parent_id.", data=None)
+        if not (student_id or phone or email or parent_id):
+            return APIResponse(success=False, message="Provide at least one of student_id, phone, email, or parent_id.", data=None)
         
         # Build query
         if student_id:
@@ -597,7 +599,7 @@ async def student_lookup(
             """
             result = await db.execute_raw_query(query, [parent_id])
             students = result["data"] if result["success"] else []
-        elif parent_phone:
+        elif phone:
             # Find all students linked to this parent phone
             query = """
                 SELECT s.* FROM students s
@@ -605,7 +607,7 @@ async def student_lookup(
                 JOIN parents p ON psl.parent_id = p.id
                 WHERE p.phone = $1
             """
-            result = await db.execute_raw_query(query, [parent_phone])
+            result = await db.execute_raw_query(query, [phone])
             students = result["data"] if result["success"] else []
 
             # If no students found, try to return parent info only
@@ -613,7 +615,7 @@ async def student_lookup(
                 parent_result = await db.execute_query(
                     "parents",
                     "select",
-                    filters={"phone": parent_phone},
+                    filters={"phone": phone},
                     select_fields="first_name, last_name, phone"
                 )
                 if parent_result["success"] and parent_result["data"]:
@@ -626,6 +628,37 @@ async def student_lookup(
                             "parent_first_name": parent["first_name"],
                             "parent_last_name": parent["last_name"],
                             "parent_phone": parent["phone"]
+                        }]
+                    )
+        elif email:
+            # Find all students linked to this parent email
+            query = """
+                SELECT s.* FROM students s
+                JOIN parent_student_links psl ON s.id = psl.student_id
+                JOIN parents p ON psl.parent_id = p.id
+                WHERE p.email = $1
+            """
+            result = await db.execute_raw_query(query, [email])
+            students = result["data"] if result["success"] else []
+
+            # If no students found, try to return parent info only
+            if not students:
+                parent_result = await db.execute_query(
+                    "parents",
+                    "select",
+                    filters={"email": email},
+                    select_fields="first_name, last_name, email"
+                )
+                if parent_result["success"] and parent_result["data"]:
+                    parent = parent_result["data"][0]
+                    # Return parent info in a consistent format for the frontend
+                    return APIResponse(
+                        success=True,
+                        message="Parent found, but no students linked",
+                        data=[{
+                            "parent_first_name": parent["first_name"],
+                            "parent_last_name": parent["last_name"],
+                            "parent_email": parent["email"]
                         }]
                     )
         else:
