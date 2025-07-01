@@ -608,6 +608,27 @@ async def student_lookup(
             """
             result = await db.execute_raw_query(query, [parent_phone])
             students = result["data"] if result["success"] else []
+
+            # If no students found, try to return parent info only
+            if not students:
+                parent_result = await db.execute_query(
+                    "parents",
+                    "select",
+                    filters={"phone": parent_phone},
+                    select_fields="first_name, last_name, phone"
+                )
+                if parent_result["success"] and parent_result["data"]:
+                    parent = parent_result["data"][0]
+                    # Return parent info in a consistent format for the frontend
+                    return APIResponse(
+                        success=True,
+                        message="Parent found, but no students linked",
+                        data=[{
+                            "parent_first_name": parent["first_name"],
+                            "parent_last_name": parent["last_name"],
+                            "parent_phone": parent["phone"]
+                        }]
+                    )
         else:
             students = []
         
