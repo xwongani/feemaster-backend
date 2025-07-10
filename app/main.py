@@ -193,7 +193,7 @@ async def root():
     """Root endpoint"""
     return {
         "message": "Fee Master Backend API",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "status": "running",
         "docs": "/docs" if settings.debug else None
     }
@@ -204,7 +204,7 @@ async def api_info():
     """API information endpoint"""
     return {
         "name": "Fee Master Backend API",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "description": "Comprehensive school fee management system",
         "features": [
             "Student Management",

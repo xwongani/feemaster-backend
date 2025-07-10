@@ -11,8 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "Fee Master Backend"
     version: str = "2.1.0"
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
-    host: str = "0.0.0.0"
-    port: int = 8000
+    host: str = "https://feemaster-backend-yww7.onrender.com"
     
     # Security Settings
     secret_key: str = os.getenv("SECRET_KEY", "your-secret-key-here")
