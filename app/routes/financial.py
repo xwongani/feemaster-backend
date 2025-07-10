@@ -1039,3 +1039,87 @@ async def bulk_import_payments(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
+
+@router.post("/student-fees/request", response_model=APIResponse)
+async def request_student_fee(
+    student_id: str,
+    fee_type_id: str,
+    academic_year_id: str,
+    academic_term_id: str,
+    amount: float,
+    due_date: date,
+    current_user: dict = Depends(get_current_user)
+):
+    """Allow a parent to request/add a school fee for their child (with validation)."""
+    try:
+        # Only allow parents
+        if current_user["role"] != "parent":
+            raise HTTPException(status_code=403, detail="Only parents can request fees.")
+
+        # Validate parent-student relationship
+        link_result = await db.execute_query(
+            "parent_student_links",
+            "select",
+            filters={"parent_id": current_user["id"], "student_id": student_id},
+            select_fields="id"
+        )
+        if not link_result["success"] or not link_result["data"]:
+            raise HTTPException(status_code=403, detail="You are not linked to this student.")
+
+        # Validate fee type, year, and term exist
+        fee_type_result = await db.execute_query(
+            "fee_types", "select", filters={"id": fee_type_id}, select_fields="id"
+        )
+        if not fee_type_result["success"] or not fee_type_result["data"]:
+            raise HTTPException(status_code=400, detail="Invalid fee type.")
+        year_result = await db.execute_query(
+            "academic_years", "select", filters={"id": academic_year_id}, select_fields="id"
+        )
+        if not year_result["success"] or not year_result["data"]:
+            raise HTTPException(status_code=400, detail="Invalid academic year.")
+        term_result = await db.execute_query(
+            "academic_terms", "select", filters={"id": academic_term_id}, select_fields="id"
+        )
+        if not term_result["success"] or not term_result["data"]:
+            raise HTTPException(status_code=400, detail="Invalid academic term.")
+
+        # Prevent duplicate fee for same student, type, year, and term
+        duplicate_result = await db.execute_query(
+            "student_fees",
+            "select",
+            filters={
+                "student_id": student_id,
+                "fee_type_id": fee_type_id,
+                "academic_year_id": academic_year_id,
+                "academic_term_id": academic_term_id
+            },
+            select_fields="id"
+        )
+        if duplicate_result["success"] and duplicate_result["data"]:
+            raise HTTPException(status_code=400, detail="Fee already exists for this student, type, year, and term.")
+
+        # Insert the fee (optionally mark as pending/needs approval)
+        fee_data = {
+            "student_id": student_id,
+            "fee_type_id": fee_type_id,
+            "academic_year_id": academic_year_id,
+            "academic_term_id": academic_term_id,
+            "amount": amount,
+            "due_date": due_date,
+            # Optionally add a status field if your schema supports it
+            # "status": "pending_approval"
+        }
+        result = await db.execute_query("student_fees", "insert", data=fee_data)
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+
+        return APIResponse(
+            success=True,
+            message="Fee request submitted successfully.",
+            data=result["data"][0] if result["data"] else None
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to request student fee: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) 
