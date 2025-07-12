@@ -46,7 +46,7 @@ sentry_sdk.init(
 
 from app.database import db
 
-from app.routes import auth, students, payments, dashboard, reports, integrations, settings as settings_routes, financial, parents, quickbooks, errors, parent_portal, test_sentry
+from app.routes import auth, students, payments, dashboard, reports, integrations, settings as settings_routes, financial, parents, quickbooks, errors, parent_portal, test_sentry, tumeny
 
 # Import models
 from app.models import (
@@ -86,9 +86,9 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Fee Master Backend API",
+    title="Master Fees Backend API",
     description="Comprehensive school fee management system backend",
-    version="2.0.0",
+    version="2.1.0",
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None
 )
@@ -109,7 +109,7 @@ app.add_middleware(
 
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["*"] if settings.debug else ["your-domain.com"]
+    allowed_hosts=["*"] if settings.debug else ["https://master-fees.com"]
 )
 
 # Request timing middleware
@@ -170,7 +170,8 @@ async def health_check():
             "whatsapp": whatsapp_service.initialized,
             "websocket": websocket_service.initialized,
             "audit": audit_service.initialized,
-            "bulk_operations": bulk_operations_service.initialized
+            "bulk_operations": bulk_operations_service.initialized,
+            "tumeny": tumeny_service.initialized
         }
         
         return {
@@ -226,7 +227,8 @@ async def api_info():
             "Stripe",
             "PayPal",
             "WhatsApp Business API",
-            "Twilio SMS"
+            "Twilio SMS",
+            "Tumeny"
         ],
         "environment": settings.environment,
         "debug": settings.debug
@@ -246,6 +248,7 @@ app.include_router(quickbooks.router, prefix="/quickbooks", tags=["quickbooks"])
 app.include_router(errors.router, prefix="/errors", tags=["errors"])
 app.include_router(parent_portal.router, prefix="/parent-portal", tags=["parent-portal"])
 app.include_router(test_sentry.router, prefix="/test-sentry", tags=["test-sentry"])
+app.include_router(tumeny.router, prefix="/tumeny", tags=["tumeny"])
 
 # Global exception handler
 @app.exception_handler(Exception)
@@ -298,7 +301,8 @@ async def startup_event():
             whatsapp_service,
             websocket_service,
             audit_service,
-            bulk_operations_service
+            bulk_operations_service,
+            tumeny_service
         ]
         
         for service in services:

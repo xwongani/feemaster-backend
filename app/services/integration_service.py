@@ -47,6 +47,15 @@ class IntegrationService:
                     {"name": "password", "type": "password", "required": True},
                     {"name": "use_tls", "type": "boolean", "required": True}
                 ]
+            },
+            "tumeny": {
+                "name": "Tumeny Payment Gateway",
+                "type": "payment_gateway",
+                "config_fields": [
+                    {"name": "api_key", "type": "password", "required": True},
+                    {"name": "merchant_id", "type": "text", "required": True},
+                    {"name": "environment", "type": "select", "options": ["sandbox", "production"], "required": True}
+                ]
             }
         }
 
@@ -196,6 +205,8 @@ class IntegrationService:
                 return await self._test_sms_gateway(config)
             elif integration_id == "email_service":
                 return await self._test_email_service(config)
+            elif integration_id == "tumeny":
+                return await self._test_tumeny(config)
             
             return {"success": False, "error": "Unsupported integration type"}
             
@@ -257,5 +268,38 @@ class IntegrationService:
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    async def _test_tumeny(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            api_key = config.get("api_key")
+            merchant_id = config.get("merchant_id")
+            environment = config.get("environment", "sandbox")
+
+            base_url = "https://tumeny.herokuapp.com" if environment == "sandbox" else "https://tumeny.herokuapp.com"
+
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+
+            test_endpoint = f"{base_url}/merchant/{marchant_id}/status"
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(test_endpoint, headers=headers) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return {
+                            "success": True,
+                            "message": "Tumeny connection successful",
+                            "data": data
+                        }
+                    else:
+                        error_text = await response.text()
+                        return {
+                            "success": False,
+                            "error": f"Tumeny API returned status {response.status}: {error_text}"
+                        }
+                except Exception as e:
+                    return {"success": False, "error": str(e)}
 
 integration_service = IntegrationService() 
